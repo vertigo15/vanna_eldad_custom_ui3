@@ -1,0 +1,29 @@
+{
+  "documentation": [
+    {
+      "id": "doc_001",
+      "topic": "Customer Segmentation",
+      "content": "Customers are segmented by YearlyIncome in DimCustomer. High-value customers have YearlyIncome > 100000. The Gender field uses 'M' for Male and 'F' for Female."
+    },
+    {
+      "id": "doc_002",
+      "topic": "Sales Metrics",
+      "content": "Total revenue is calculated as SUM(SalesAmount) from FactInternetSales. Net revenue excludes TaxAmt and Freight: SalesAmount - TaxAmt - Freight."
+    },
+    {
+      "id": "doc_003",
+      "topic": "Date Dimension",
+      "content": "The DimDate table contains calendar information. Use DateKey to join with fact tables. CalendarYear represents the year, and CalendarQuarter represents the quarter (1-4)."
+    },
+    {
+      "id": "doc_004",
+      "topic": "Product Information",
+      "content": "Products are stored in DimProduct. EnglishProductName contains the product name. StandardCost is the cost to produce, while ListPrice is the retail price. ProductLine values: R=Road, M=Mountain, T=Touring, S=Standard."
+    },
+    {
+      "id": "doc_005",
+      "topic": "Geography Data",
+      "content": "Geographic information is in DimGeography. EnglishCountryRegionName contains country names. StateProvinceName contains state/province names. Use GeographyKey to join with customer data."
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "sql_examples": [
+    {
+      "id": "sql_001",
+      "question": "What is the total revenue?",
+      "sql": "SELECT SUM(SalesAmount) as TotalRevenue FROM FactInternetSales;"
+    },
+    {
+      "id": "sql_002",
+      "question": "Show me top 10 customers by total purchases",
+      "sql": "SELECT c.FirstName, c.LastName, SUM(f.SalesAmount) as TotalPurchases\nFROM FactInternetSales f\nJOIN DimCustomer c ON f.CustomerKey = c.CustomerKey\nGROUP BY c.CustomerKey, c.FirstName, c.LastName\nORDER BY TotalPurchases DESC\nLIMIT 10;"
+    },
+    {
+      "id": "sql_003",
+      "question": "How many high-value customers do we have?",
+      "sql": "SELECT COUNT(*) as HighValueCustomers FROM DimCustomer WHERE YearlyIncome > 100000;"
+    },
+    {
+      "id": "sql_004",
+      "question": "What are the total sales by year?",
+      "sql": "SELECT d.CalendarYear, SUM(f.SalesAmount) as YearlySales\nFROM FactInternetSales f\nJOIN DimDate d ON f.OrderDateKey = d.DateKey\nGROUP BY d.CalendarYear\nORDER BY d.CalendarYear;"
+    },
+    {
+      "id": "sql_005",
+      "question": "Show me the top 5 products by revenue",
+      "sql": "SELECT p.EnglishProductName, SUM(f.SalesAmount) as TotalRevenue\nFROM FactInternetSales f\nJOIN DimProduct p ON f.ProductKey = p.ProductKey\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY TotalRevenue DESC\nLIMIT 5;"
+    },
+    {
+      "id": "sql_006",
+      "question": "What is the average order value?",
+      "sql": "SELECT AVG(SalesAmount) as AvgOrderValue FROM FactInternetSales;"
+    },
+    {
+      "id": "sql_007",
+      "question": "How many orders were placed in 2023?",
+      "sql": "SELECT COUNT(*) as OrderCount\nFROM FactInternetSales f\nJOIN DimDate d ON f.OrderDateKey = d.DateKey\nWHERE d.CalendarYear = 2023;"
+    },
+    {
+      "id": "sql_008",
+      "question": "Show sales by country",
+      "sql": "SELECT g.EnglishCountryRegionName, SUM(f.SalesAmount) as TotalSales\nFROM FactInternetSales f\nJOIN DimCustomer c ON f.CustomerKey = c.CustomerKey\nJOIN DimGeography g ON c.GeographyKey = g.GeographyKey\nGROUP BY g.EnglishCountryRegionName\nORDER BY TotalSales DESC;"
+    }
+  ]
+}

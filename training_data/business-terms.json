@@ -1,0 +1,387 @@
+[
+  {
+    "term": "Reseller",
+    "definition": "A business entity that purchases products from Adventure Works and resells them to end customers",
+    "category": "sales_channels",
+    "id": "term-1765054291099-cne529t7j",
+    "createdAt": "2025-12-06T20:51:31.099Z"
+  },
+  {
+    "term": "Internet Sales",
+    "definition": "Direct sales to customers through the Adventure Works online store",
+    "category": "sales_channels",
+    "id": "term-1765054291099-5nwzcofqi",
+    "createdAt": "2025-12-06T20:51:31.099Z"
+  },
+  {
+    "term": "Reseller",
+    "definition": "A business entity that purchases products from Adventure Works and resells them to end customers",
+    "category": "sales_channels",
+    "id": "term-1765054307722-0aucqn4k8",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Internet Sales",
+    "definition": "Direct sales to customers through the Adventure Works online store",
+    "category": "sales_channels",
+    "id": "term-1765054307722-m30s8yzvo",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Amount",
+    "definition": "The total monetary value of a sale before any discounts are applied. Calculated as Unit Price × Order Quantity",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-omkh5rx95",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Extended Amount",
+    "definition": "The line item total after applying unit price discounts. Formula: Unit Price × Order Quantity × (1 - Unit Price Discount Pct)",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-0de4tbg1y",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Total Product Cost",
+    "definition": "The cost to Adventure Works for products sold. Used to calculate profit margins",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-kpq83nrut",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Gross Profit",
+    "definition": "Revenue minus cost of goods sold. Calculated as Sales Amount - Total Product Cost",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-rt410p6uc",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Gross Margin",
+    "definition": "Gross profit expressed as a percentage of sales. Formula: (Sales Amount - Total Product Cost) / Sales Amount × 100",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-nnnd2tqbe",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Order Quantity",
+    "definition": "The number of units of a product ordered in a single transaction",
+    "category": "sales_metrics",
+    "id": "term-1765054307722-enx0oc4tr",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Fiscal Year",
+    "definition": "Adventure Works fiscal year runs from July 1st to June 30th. FY 2013 means July 1, 2012 to June 30, 2013",
+    "category": "time_periods",
+    "id": "term-1765054307722-8vo49q43t",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Fiscal Quarter",
+    "definition": "Q1: Jul-Sep, Q2: Oct-Dec, Q3: Jan-Mar, Q4: Apr-Jun",
+    "category": "time_periods",
+    "id": "term-1765054307722-ca1s5ms4g",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Calendar Year",
+    "definition": "Standard calendar year from January 1st to December 31st",
+    "category": "time_periods",
+    "id": "term-1765054307722-ug6l25ofh",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Territory",
+    "definition": "Geographic region assigned to a sales representative or team. Examples: Northwest, Southwest, Northeast, Southeast, Canada, France, Germany, Australia",
+    "category": "geography",
+    "id": "term-1765054307722-j9k0lgkgs",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Territory Group",
+    "definition": "Higher-level grouping of territories. Values: North America, Europe, Pacific",
+    "category": "geography",
+    "id": "term-1765054307722-3rt469clc",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Product Category",
+    "definition": "Top-level product classification. Categories: Bikes, Components, Clothing, Accessories",
+    "category": "product_classification",
+    "id": "term-1765054307722-iop348spn",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Product Subcategory",
+    "definition": "Detailed product classification within categories. Examples: Mountain Bikes, Road Bikes, Helmets, Jerseys, etc.",
+    "category": "product_classification",
+    "id": "term-1765054307722-kq7uktr5q",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Standard Cost",
+    "definition": "The baseline manufacturing or acquisition cost for a product",
+    "category": "product_metrics",
+    "id": "term-1765054307722-3s8td33r6",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "List Price",
+    "definition": "The manufacturer's suggested retail price (MSRP) for a product",
+    "category": "product_metrics",
+    "id": "term-1765054307722-20sdaw3p9",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Dealer Price",
+    "definition": "The wholesale price offered to resellers, typically lower than list price",
+    "category": "product_metrics",
+    "id": "term-1765054307722-6kiid4ypg",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Product Line",
+    "definition": "Product quality tier. Values: R (Road), M (Mountain), T (Touring), S (Standard)",
+    "category": "product_classification",
+    "id": "term-1765054307722-7grnhe0cb",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Customer Type",
+    "definition": "Individual consumer or business/organization customer",
+    "category": "customer_classification",
+    "id": "term-1765054307722-tuvry5xla",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Active Customer",
+    "definition": "A customer who has made at least one purchase in the last 12 months",
+    "category": "customer_metrics",
+    "id": "term-1765054307722-fko0nlo2p",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Customer Lifetime Value",
+    "definition": "Total revenue generated from a customer across all their purchases",
+    "category": "customer_metrics",
+    "id": "term-1765054307722-snx7vnhwn",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Reseller Type",
+    "definition": "Classification of reseller business. Types: Warehouse, Value Added Reseller, Specialty Bike Shop",
+    "category": "reseller_classification",
+    "id": "term-1765054307722-cp6c2e46o",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Quota",
+    "definition": "Target sales amount assigned to a salesperson for a specific time period (usually quarterly)",
+    "category": "sales_metrics",
+    "id": "term-1765054307722-qooihm2l0",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Quota Achievement",
+    "definition": "Percentage of quota met. Formula: (Actual Sales / Sales Quota) × 100",
+    "category": "sales_metrics",
+    "id": "term-1765054307722-96qiks9lm",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Year-over-Year Growth",
+    "definition": "Percentage change in a metric compared to the same period in the previous year. Formula: ((Current Year - Previous Year) / Previous Year) × 100",
+    "category": "performance_metrics",
+    "id": "term-1765054307722-qw2u4d03m",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Month-over-Month Growth",
+    "definition": "Percentage change in a metric compared to the previous month",
+    "category": "performance_metrics",
+    "id": "term-1765054307722-wpx57uefu",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Average Order Value",
+    "definition": "Average sales amount per transaction. Formula: Total Sales Amount / Number of Orders",
+    "category": "sales_metrics",
+    "id": "term-1765054307722-jm2kggfrx",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Units Sold",
+    "definition": "Total number of product units sold across all transactions",
+    "category": "sales_metrics",
+    "id": "term-1765054307722-f6rvujdvi",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Product Model",
+    "definition": "Specific design or version of a product. Example: 'Mountain-100' is a model within Mountain Bikes subcategory",
+    "category": "product_classification",
+    "id": "term-1765054307722-e3tx0hjww",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Reason",
+    "definition": "Customer's stated reason for purchase. Examples: Price, Quality, Manufacturer, Review, Television Advertisement",
+    "category": "sales_analysis",
+    "id": "term-1765054307722-zyk02yu16",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Promotion",
+    "definition": "Marketing campaign or discount offer. Examples: 'Mountain-100 Clearance Sale', 'Touring-3000 Promotion'",
+    "category": "marketing",
+    "id": "term-1765054307722-xcuv7xe1w",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Discount Percentage",
+    "definition": "Percentage reduction from list price offered to customer",
+    "category": "pricing",
+    "id": "term-1765054307722-r8gqql9d7",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Tax Amount",
+    "definition": "Sales tax collected on the transaction based on ship-to location tax rates",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-q0d485cjq",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Freight Cost",
+    "definition": "Shipping and handling charges for order delivery",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-nfuq254b6",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Currency",
+    "definition": "Monetary unit for the transaction. Adventure Works operates in USD, CAD, EUR, GBP, AUD",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-5pnf1q5ud",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Exchange Rate",
+    "definition": "Conversion rate between foreign currency and USD for international sales",
+    "category": "financial_metrics",
+    "id": "term-1765054307722-sai2tujpd",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Sales Order Number",
+    "definition": "Unique identifier for each sales transaction. Format: SO######",
+    "category": "identifiers",
+    "id": "term-1765054307722-9144yevwy",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Employee",
+    "definition": "Adventure Works staff member. Relevant for tracking sales performance by salesperson",
+    "category": "organizational",
+    "id": "term-1765054307722-exrgu9u4o",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Department",
+    "definition": "Organizational unit within Adventure Works. Examples: Sales, Marketing, Production, Quality Assurance",
+    "category": "organizational",
+    "id": "term-1765054307722-bqnehswnd",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Gender",
+    "definition": "Customer or employee gender. Values: M (Male), F (Female)",
+    "category": "demographics",
+    "id": "term-1765054307722-7t9vcw0g2",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Marital Status",
+    "definition": "Customer marital status. Values: M (Married), S (Single)",
+    "category": "demographics",
+    "id": "term-1765054307722-3y8oeuahw",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Education Level",
+    "definition": "Customer education attainment. Values: High School, Partial College, Bachelors, Graduate Degree",
+    "category": "demographics",
+    "id": "term-1765054307722-45duegvzw",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Occupation",
+    "definition": "Customer's profession. Examples: Professional, Management, Skilled Manual, Clerical",
+    "category": "demographics",
+    "id": "term-1765054307722-91rmu2d56",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Home Owner",
+    "definition": "Indicates if customer owns their home. Values: Yes/No",
+    "category": "demographics",
+    "id": "term-1765054307722-y18735ekv",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Number of Cars Owned",
+    "definition": "Number of vehicles owned by customer, used for customer segmentation",
+    "category": "demographics",
+    "id": "term-1765054307722-ux9m6d2jx",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Commute Distance",
+    "definition": "Customer's distance from work. Categories: 0-1 Miles, 1-2 Miles, 2-5 Miles, 5-10 Miles, 10+ Miles",
+    "category": "demographics",
+    "id": "term-1765054307722-0kc4d1x31",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Yearly Income",
+    "definition": "Customer's annual income, used for customer segmentation and targeting",
+    "category": "demographics",
+    "id": "term-1765054307722-szx2jf3y2",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Total Children",
+    "definition": "Number of children in customer's household",
+    "category": "demographics",
+    "id": "term-1765054307722-c1il09vig",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Due Date",
+    "definition": "Expected payment due date for reseller orders",
+    "category": "operations",
+    "id": "term-1765054307722-5e247jj85",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Ship Date",
+    "definition": "Date when order was shipped to customer",
+    "category": "operations",
+    "id": "term-1765054307722-rf67bdo77",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Delivery Time",
+    "definition": "Number of days between order date and ship date",
+    "category": "operations",
+    "id": "term-1765054307722-clne26fwb",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  },
+  {
+    "term": "Internet Sales Table (factinternetsales)",
+    "definition": "The fact table containing all direct online sales. Table name: factinternetsales. Contains columns: productkey, orderdatekey, duedatekey, shipdatekey, customerkey, promotionkey, currencykey, salesterritorykey, salesordernumber, salesorderlinenumber, orderquantity, unitprice, extendedamount, totalproductcost, salesamount, taxamt, freight, orderdate, duedate, shipdate. Use this for all 'internet sales' or 'online sales' queries.",
+    "category": "table_reference",
+    "id": "term-1765054307722-08grm891a",
+    "createdAt": "2025-12-06T20:51:47.722Z"
+  }
+]

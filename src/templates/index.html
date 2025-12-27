@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to SQL</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Text to SQL</h1>
+            <p class="subtitle">Ask questions about your data in natural language</p>
+        </header>
+
+        <main>
+            <div class="content-area">
+                <div class="query-section">
+                    <div class="input-group">
+                        <textarea 
+                            id="question-input" 
+                            placeholder="Ask a question about your database (e.g., 'Show me total sales by product category')"
+                            rows="3"
+                        ></textarea>
+                        <button id="ask-button" onclick="askQuestion()">
+                            Ask Question
+                        </button>
+                    </div>
+
+                    <div id="loading" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Generating SQL and fetching results...</p>
+                    </div>
+
+                    <div id="error-message" class="error-message" style="display: none;"></div>
+                </div>
+
+                <div id="results-section" class="results-section" style="display: none;">
+                    <div class="result-card">
+                        <h2>📝 Your Question</h2>
+                        <p id="question-display" class="question-display"></p>
+                    </div>
+
+                    <div class="result-card">
+                        <h2>📊 Results</h2>
+                        <div class="results-actions">
+                            <button class="export-button" onclick="exportToExcel()" style="display: none;" id="export-btn">
+                                📄 Export to Excel
+                            </button>
+                            <button class="copy-results-button" onclick="copyResults()" style="display: none;" id="copy-results-btn">
+                                📋 Copy to Clipboard
+                            </button>
+                        </div>
+                        <div id="results-display" class="results-display"></div>
+                    </div>
+
+                    <div class="result-card">
+                        <h2>💻 Generated SQL</h2>
+                        <pre id="sql-display" class="sql-display"></pre>
+                        <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                        
+                        <div class="prompt-section" id="prompt-section" style="display: none;">
+                            <button class="toggle-prompt-button" onclick="togglePrompt()" id="toggle-prompt-btn">
+                                ▼ View Prompt
+                            </button>
+                            <div id="prompt-content" class="prompt-content" style="display: none;">
+                                <h3>System Prompt:</h3>
+                                <pre id="prompt-display" class="prompt-display"></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="result-card" id="explanation-card" style="display: none;">
+                        <h2>💡 Explanation</h2>
+                        <p id="explanation-display" class="explanation-display"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="info-card">
+                    <h3>📚 Available Tables</h3>
+                    <button onclick="loadTables()">Load Tables</button>
+                    <input 
+                        type="text" 
+                        id="table-search" 
+                        class="table-search-input" 
+                        placeholder="Search tables..." 
+                        onkeyup="filterTables()"
+                        style="display: none;"
+                    />
+                    <div id="tables-list" class="tables-list"></div>
+                </div>
+
+                <div class="info-card">
+                    <h3>ℹ️ Sample Questions</h3>
+                    <ul class="sample-questions">
+                        <li onclick="fillQuestion('What are the top 10 products by sales?')">
+                            What are the top 10 products by sales?
+                        </li>
+                        <li onclick="fillQuestion('Show me sales trends by month for 2023')">
+                            Show me sales trends by month for 2023
+                        </li>
+                        <li onclick="fillQuestion('Which customers have the highest order totals?')">
+                            Which customers have the highest order totals?
+                        </li>
+                        <li onclick="fillQuestion('What is the average order value by region?')">
+                            What is the average order value by region?
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <h3>🕐 Recent Questions</h3>
+                    <div class="history-controls">
+                        <button onclick="clearHistory()" class="clear-history-btn" style="display: none;" id="clear-history-btn">
+                            Clear History
+                        </button>
+                    </div>
+                    <div id="question-history" class="question-history"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}?v=8"></script>
+</body>
+</html>

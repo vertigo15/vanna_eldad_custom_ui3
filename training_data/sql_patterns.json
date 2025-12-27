@@ -1,0 +1,74 @@
+{
+  "common_queries": [
+    {
+      "category": "basic_selects",
+      "description": "Get recent customers (first purchase in last 30 days)",
+      "sql": "SELECT customerkey, customeralternatekey, firstname, lastname, emailaddress, datefirstpurchase FROM dimcustomer WHERE datefirstpurchase > CURRENT_DATE - INTERVAL '30 days' ORDER BY datefirstpurchase DESC"
+    },
+    {
+      "category": "aggregations",
+      "description": "Internet sales amount by calendar year",
+      "sql": "SELECT d.calendaryear, SUM(f.salesamount) AS total_sales FROM factinternetsales f JOIN dimdate d ON f.orderdatekey = d.datekey GROUP BY d.calendaryear ORDER BY d.calendaryear"
+    },
+    {
+      "category": "time_series",
+      "description": "Daily internet sales (last 30 days)",
+      "sql": "SELECT d.fulldatealternatekey AS order_date, COUNT(*) AS lines, SUM(f.salesamount) AS revenue FROM factinternetsales f JOIN dimdate d ON f.orderdatekey = d.datekey WHERE d.fulldatealternatekey > CURRENT_DATE - INTERVAL '30 days' GROUP BY d.fulldatealternatekey ORDER BY order_date DESC"
+    },
+    {
+      "category": "top_n",
+      "description": "Top 10 products by internet revenue",
+      "sql": "SELECT p.productkey, p.englishproductname AS product_name, SUM(f.salesamount) AS revenue FROM factinternetsales f JOIN dimproduct p ON f.productkey = p.productkey GROUP BY p.productkey, p.englishproductname ORDER BY revenue DESC LIMIT 10"
+    },
+    {
+      "category": "joins",
+      "description": "Sample customer purchases with product and order info",
+      "sql": "SELECT f.salesordernumber, f.salesorderlinenumber, c.customeralternatekey, p.englishproductname AS product_name, d.fulldatealternatekey AS order_date, f.orderquantity, f.unitprice, f.salesamount FROM factinternetsales f JOIN dimcustomer c ON f.customerkey = c.customerkey JOIN dimproduct p ON f.productkey = p.productkey JOIN dimdate d ON f.orderdatekey = d.datekey ORDER BY d.fulldatealternatekey DESC LIMIT 100"
+    },
+    {
+      "category": "aggregations",
+      "description": "Sales by promotion (internet channel)",
+      "sql": "SELECT COALESCE(pr.englishpromotionname, 'No Promotion') AS promotion, COUNT(*) AS lines, SUM(f.discountamount) AS total_discount, SUM(f.salesamount) AS revenue FROM factinternetsales f LEFT JOIN dimpromotion pr ON f.promotionkey = pr.promotionkey GROUP BY COALESCE(pr.englishpromotionname, 'No Promotion') ORDER BY revenue DESC"
+    },
+    {
+      "category": "window_functions",
+      "description": "Running total of internet sales by date",
+      "sql": "WITH daily AS (SELECT d.fulldatealternatekey AS order_date, SUM(f.salesamount) AS revenue FROM factinternetsales f JOIN dimdate d ON f.orderdatekey = d.datekey GROUP BY d.fulldatealternatekey) SELECT order_date, revenue, SUM(revenue) OVER (ORDER BY order_date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total FROM daily ORDER BY order_date"
+    },
+    {
+      "category": "currency_rates",
+      "description": "Average and end-of-day currency rates per month",
+      "sql": "SELECT d.calendaryear, d.monthnumberofyear AS month, c.currencyname, AVG(f.averagerate) AS avg_rate, AVG(f.endofdayrate) AS avg_eod_rate FROM factcurrencyrate f JOIN dimdate d ON f.datekey = d.datekey JOIN dimcurrency c ON f.currencykey = c.currencykey GROUP BY d.calendaryear, d.monthnumberofyear, c.currencyname ORDER BY d.calendaryear, month, c.currencyname"
+    },
+    {
+      "category": "reseller_sales",
+      "description": "Reseller sales by salesperson",
+      "sql": "SELECT e.firstname || ' ' || e.lastname AS salesperson, SUM(fr.salesamount) AS revenue, COUNT(*) AS lines FROM factresellersales fr JOIN dimemployee e ON fr.employeekey = e.employeekey GROUP BY salesperson ORDER BY revenue DESC"
+    },
+    {
+      "category": "sales_reasons",
+      "description": "Internet sales reasons distribution",
+      "sql": "SELECT r.salesreasonname, r.salesreasonreasontype, COUNT(*) AS occurrences FROM factinternetsalesreason br JOIN dimsalesreason r ON br.salesreasonkey = r.salesreasonkey GROUP BY r.salesreasonname, r.salesreasonreasontype ORDER BY occurrences DESC"
+    },
+    {
+      "category": "heb_basic_selects",
+      "description": "לקוחות חדשים ב-30 הימים האחרונים",
+      "sql": "SELECT customerkey, customeralternatekey, firstname, lastname, emailaddress, datefirstpurchase FROM dimcustomer WHERE datefirstpurchase > CURRENT_DATE - INTERVAL '30 days' ORDER BY datefirstpurchase DESC"
+    },
+    {
+      "category": "heb_aggregations",
+      "description": "סכום מכירות אינטרנט לפי אזור מכירות",
+      "sql": "SELECT st.salesterritorygroup AS territory_group, st.salesterritorycountry AS country, SUM(f.salesamount) AS revenue FROM factinternetsales f JOIN dimsalesterritory st ON f.salesterritorykey = st.salesterritorykey GROUP BY st.salesterritorygroup, st.salesterritorycountry ORDER BY revenue DESC"
+    },
+    {
+      "category": "heb_filters",
+      "description": "לקוחות עם הכנסה שנתית גבוהה מ-100,000",
+      "sql": "SELECT customerkey, firstname, lastname, yearlyincome AS yearly_income FROM dimcustomer WHERE yearlyincome > 100000 ORDER BY yearly_income DESC"
+    },
+    {
+      "category": "time_series",
+      "description": "Monthly internet sales (last 12 months)",
+      "sql": "SELECT d.calendaryear, d.monthnumberofyear AS month, SUM(f.salesamount) AS revenue FROM factinternetsales f JOIN dimdate d ON f.orderdatekey = d.datekey WHERE d.fulldatealternatekey >= (date_trunc('month', CURRENT_DATE) - INTERVAL '11 months') GROUP BY d.calendaryear, d.monthnumberofyear ORDER BY d.calendaryear, month"
+    }
+  ]
+}

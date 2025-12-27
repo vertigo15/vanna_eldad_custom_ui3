@@ -1,0 +1,476 @@
+{
+  "test_run_timestamp": "2025-12-27T17:24:45.188422",
+  "total_tests": 18,
+  "passed_tests": 16,
+  "results": [
+    {
+      "test_number": 1,
+      "category": "DDL",
+      "training_id": "ddl_001",
+      "question": "Show me customer names and email addresses",
+      "passed": true,
+      "sql_generated": "SELECT firstname, lastname, emailaddress FROM dimcustomer ORDER BY lastname, firstname LIMIT 100;",
+      "checks": [
+        {
+          "check": "Table DimCustomer",
+          "passed": true
+        },
+        {
+          "check": "Column FirstName",
+          "passed": true
+        },
+        {
+          "check": "Column LastName",
+          "passed": true
+        },
+        {
+          "check": "Column EmailAddress",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:30.272388",
+      "table": "DimCustomer"
+    },
+    {
+      "test_number": 2,
+      "category": "DDL",
+      "training_id": "ddl_002",
+      "question": "List all sales with order numbers and amounts",
+      "passed": true,
+      "sql_generated": "SELECT salesordernumber, salesorderlinenumber, salesamount FROM factinternetsales ORDER BY salesordernumber, salesorderlinenumber LIMIT 100;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Column SalesOrderNumber",
+          "passed": true
+        },
+        {
+          "check": "Column SalesAmount",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:33.010994",
+      "table": "FactInternetSales"
+    },
+    {
+      "test_number": 3,
+      "category": "DDL",
+      "training_id": "ddl_003",
+      "question": "Show product names with their prices and costs",
+      "passed": true,
+      "sql_generated": "SELECT productkey, englishproductname AS product_name, standardcost, listprice, dealerprice FROM dimproduct ORDER BY englishproductname LIMIT 100;",
+      "checks": [
+        {
+          "check": "Table DimProduct",
+          "passed": true
+        },
+        {
+          "check": "Column EnglishProductName",
+          "passed": true
+        },
+        {
+          "check": "Column ListPrice",
+          "passed": true
+        },
+        {
+          "check": "Column StandardCost",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:35.756889",
+      "table": "DimProduct"
+    },
+    {
+      "test_number": 4,
+      "category": "DDL",
+      "training_id": "ddl_004",
+      "question": "Show calendar years with their quarters",
+      "passed": true,
+      "sql_generated": "SELECT DISTINCT calendaryear, calendarquarter FROM dimdate ORDER BY calendaryear, calendarquarter;",
+      "checks": [
+        {
+          "check": "Table DimDate",
+          "passed": true
+        },
+        {
+          "check": "Column CalendarYear",
+          "passed": true
+        },
+        {
+          "check": "Column CalendarQuarter",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:38.487164",
+      "table": "DimDate"
+    },
+    {
+      "test_number": 5,
+      "category": "DDL",
+      "training_id": "ddl_005",
+      "question": "List cities with their state and country information",
+      "passed": true,
+      "sql_generated": "SELECT city, stateprovincename AS state, englishcountryregionname AS country FROM dimgeography WHERE city IS NOT NULL GROUP BY city, stateprovincename, englishcountryregionname ORDER BY country, stateprovincename, city;",
+      "checks": [
+        {
+          "check": "Table DimGeography",
+          "passed": true
+        },
+        {
+          "check": "Column City",
+          "passed": true
+        },
+        {
+          "check": "Column StateProvinceName",
+          "passed": true
+        },
+        {
+          "check": "Column EnglishCountryRegionName",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:41.414621",
+      "table": "DimGeography"
+    },
+    {
+      "test_number": 6,
+      "category": "Documentation",
+      "training_id": "doc_001",
+      "question": "Show me all high-value customers with income over 100000",
+      "passed": false,
+      "sql_generated": "SELECT customerkey, customeralternatekey, firstname, lastname, gender, yearlyincome AS yearly_income, emailaddress\nFROM dimcustomer\nWHERE yearlyincome > 100000\nORDER BY yearly_income DESC;",
+      "checks": [
+        {
+          "check": "No errors",
+          "passed": false,
+          "message": "operator does not exist: money > integer\nHINT:  No operator matches the given name and argument types. You might need to add explicit type casts."
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:44.093601",
+      "topic": "Customer Segmentation"
+    },
+    {
+      "test_number": 7,
+      "category": "Documentation",
+      "training_id": "doc_002",
+      "question": "Calculate the net revenue excluding tax and freight",
+      "passed": true,
+      "sql_generated": "SELECT SUM(salesamount) AS total_revenue,\n       SUM(salesamount - taxamt - freight) AS net_revenue_excl_tax_freight\nFROM factinternetsales;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Column SalesAmount",
+          "passed": true
+        },
+        {
+          "check": "Column TaxAmt",
+          "passed": true
+        },
+        {
+          "check": "Column Freight",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:47.227762",
+      "topic": "Sales Metrics"
+    },
+    {
+      "test_number": 8,
+      "category": "Documentation",
+      "training_id": "doc_003",
+      "question": "Show sales by calendar quarter and year",
+      "passed": true,
+      "sql_generated": "SELECT d.calendaryear,\n       d.calendarquarter,\n       SUM(f.salesamount) AS total_sales\nFROM factinternetsales f\nJOIN dimdate d ON f.orderdatekey = d.datekey\nGROUP BY d.calendaryear, d.calendarquarter\nORDER BY d.calendaryear, d.calendarquarter;",
+      "checks": [
+        {
+          "check": "Table DimDate",
+          "passed": true
+        },
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Column CalendarYear",
+          "passed": true
+        },
+        {
+          "check": "Column CalendarQuarter",
+          "passed": true
+        },
+        {
+          "check": "Join on DateKey",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:50.079723",
+      "topic": "Date Dimension"
+    },
+    {
+      "test_number": 9,
+      "category": "Documentation",
+      "training_id": "doc_004",
+      "question": "Show Road bikes with their retail prices",
+      "passed": true,
+      "sql_generated": "SELECT p.productkey, p.englishproductname AS product_name, p.listprice AS retail_price\nFROM dimproduct p\nWHERE p.productline = 'R'\n  AND p.listprice IS NOT NULL\nORDER BY p.englishproductname;",
+      "checks": [
+        {
+          "check": "Table DimProduct",
+          "passed": true
+        },
+        {
+          "check": "Column EnglishProductName",
+          "passed": true
+        },
+        {
+          "check": "Column ListPrice",
+          "passed": true
+        },
+        {
+          "check": "Column ProductLine",
+          "passed": true
+        },
+        {
+          "check": "Condition 'ProductLine = 'R''",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:52.973058",
+      "topic": "Product Information"
+    },
+    {
+      "test_number": 10,
+      "category": "Documentation",
+      "training_id": "doc_005",
+      "question": "Show customer counts by country using geography information",
+      "passed": true,
+      "sql_generated": "SELECT g.englishcountryregionname AS country, COUNT(DISTINCT c.customerkey) AS customer_count FROM dimcustomer c JOIN dimgeography g ON c.geographykey = g.geographykey GROUP BY g.englishcountryregionname ORDER BY customer_count DESC;",
+      "checks": [
+        {
+          "check": "Table DimCustomer",
+          "passed": true
+        },
+        {
+          "check": "Table DimGeography",
+          "passed": true
+        },
+        {
+          "check": "Column EnglishCountryRegionName",
+          "passed": true
+        },
+        {
+          "check": "Join on GeographyKey",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:55.733365",
+      "topic": "Geography Data"
+    },
+    {
+      "test_number": 11,
+      "category": "SQL_Example",
+      "training_id": "sql_001",
+      "question": "What is the total revenue?",
+      "passed": true,
+      "sql_generated": "SELECT SUM(salesamount) AS total_revenue FROM factinternetsales;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Aggregation SUM(SalesAmount)",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:23:58.355355"
+    },
+    {
+      "test_number": 12,
+      "category": "SQL_Example",
+      "training_id": "sql_002",
+      "question": "Show me top 10 customers by total purchases",
+      "passed": true,
+      "sql_generated": "SELECT c.customerkey, c.customeralternatekey, c.firstname, c.lastname, SUM(f.salesamount) AS total_purchases\nFROM factinternetsales f\nJOIN dimcustomer c ON f.customerkey = c.customerkey\nGROUP BY c.customerkey, c.customeralternatekey, c.firstname, c.lastname\nORDER BY total_purchases DESC\nLIMIT 10;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Table DimCustomer",
+          "passed": true
+        },
+        {
+          "check": "Aggregation SUM",
+          "passed": true
+        },
+        {
+          "check": "Limit 10",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:01.403038"
+    },
+    {
+      "test_number": 13,
+      "category": "SQL_Example",
+      "training_id": "sql_003",
+      "question": "How many high-value customers do we have?",
+      "passed": true,
+      "sql_generated": "SELECT COUNT(*) AS high_value_customers FROM dimcustomer WHERE yearlyincome > 100000::money;",
+      "checks": [
+        {
+          "check": "Table DimCustomer",
+          "passed": true
+        },
+        {
+          "check": "Condition 'YearlyIncome > 100000'",
+          "passed": true
+        },
+        {
+          "check": "Aggregation COUNT",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:12.716360"
+    },
+    {
+      "test_number": 14,
+      "category": "SQL_Example",
+      "training_id": "sql_004",
+      "question": "What are the total sales by year?",
+      "passed": true,
+      "sql_generated": "SELECT d.calendaryear, SUM(f.salesamount) AS total_sales\nFROM factinternetsales f\nJOIN dimdate d ON f.orderdatekey = d.datekey\nGROUP BY d.calendaryear\nORDER BY d.calendaryear;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Table DimDate",
+          "passed": true
+        },
+        {
+          "check": "Column CalendarYear",
+          "passed": true
+        },
+        {
+          "check": "Aggregation SUM",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:31.151532"
+    },
+    {
+      "test_number": 15,
+      "category": "SQL_Example",
+      "training_id": "sql_005",
+      "question": "Show me the top 5 products by revenue",
+      "passed": true,
+      "sql_generated": "SELECT p.productkey,\n       p.englishproductname AS product_name,\n       SUM(f.salesamount) AS revenue\nFROM factinternetsales f\nJOIN dimproduct p ON f.productkey = p.productkey\nGROUP BY p.productkey, p.englishproductname\nORDER BY revenue DESC\nLIMIT 5;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Table DimProduct",
+          "passed": true
+        },
+        {
+          "check": "Column EnglishProductName",
+          "passed": true
+        },
+        {
+          "check": "Limit 5",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:34.509893"
+    },
+    {
+      "test_number": 16,
+      "category": "SQL_Example",
+      "training_id": "sql_006",
+      "question": "What is the average order value?",
+      "passed": false,
+      "sql_generated": "SELECT SUM(salesamount) / COUNT(DISTINCT salesordernumber) AS average_order_value FROM factinternetsales;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Aggregation AVG(SalesAmount)",
+          "passed": false
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:37.312635"
+    },
+    {
+      "test_number": 17,
+      "category": "SQL_Example",
+      "training_id": "sql_007",
+      "question": "How many orders were placed in 2023?",
+      "passed": true,
+      "sql_generated": "SELECT COUNT(DISTINCT salesordernumber) AS orders_2023\nFROM factinternetsales f\nJOIN dimdate d ON f.orderdatekey = d.datekey\nWHERE d.calendaryear = 2023;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Table DimDate",
+          "passed": true
+        },
+        {
+          "check": "Condition 'CalendarYear = 2023'",
+          "passed": true
+        },
+        {
+          "check": "Aggregation COUNT",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:42.239500"
+    },
+    {
+      "test_number": 18,
+      "category": "SQL_Example",
+      "training_id": "sql_008",
+      "question": "Show sales by country",
+      "passed": true,
+      "sql_generated": "SELECT g.englishcountryregionname AS country, SUM(f.salesamount) AS revenue FROM factinternetsales f JOIN dimcustomer c ON f.customerkey = c.customerkey JOIN dimgeography g ON c.geographykey = g.geographykey GROUP BY g.englishcountryregionname ORDER BY revenue DESC;",
+      "checks": [
+        {
+          "check": "Table FactInternetSales",
+          "passed": true
+        },
+        {
+          "check": "Table DimCustomer",
+          "passed": true
+        },
+        {
+          "check": "Table DimGeography",
+          "passed": true
+        },
+        {
+          "check": "Column EnglishCountryRegionName",
+          "passed": true
+        },
+        {
+          "check": "Aggregation SUM",
+          "passed": true
+        }
+      ],
+      "timestamp": "2025-12-27T17:24:45.184497"
+    }
+  ]
+}

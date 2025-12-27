@@ -1,0 +1,357 @@
+{
+  "tables": [
+    {
+      "name": "adventureworksdwbuildversion",
+      "description": "Build/version info for AdventureWorksDW",
+      "ddl": "CREATE TABLE public.adventureworksdwbuildversion (\n\tdbversion varchar(50) NULL,\n\tversiondate timestamp NULL\n);"
+    },
+    {
+      "name": "databaselog",
+      "description": "Database log of operations/events",
+      "ddl": "CREATE TABLE public.databaselog (\n\tdatabaselogid int4 DEFAULT nextval('databaselog_seq'::regclass) NOT NULL,\n\tposttime timestamp NOT NULL,\n\tdatabaseuser varchar(128) NOT NULL,\n\t\"event\" varchar(128) NOT NULL,\n\t\"schema\" varchar(128) NULL,\n\t\"object\" varchar(128) NULL,\n\ttsql text NOT NULL,\n\txmlevent xml NOT NULL\n);"
+    },
+    {
+      "name": "dimcurrency",
+      "description": "Currency dimension",
+      "ddl": "CREATE TABLE public.dimcurrency (\n\tcurrencykey int4 DEFAULT nextval('dimcurrency_seq'::regclass) NOT NULL,\n\tcurrencyalternatekey bpchar(3) NOT NULL,\n\tcurrencyname varchar(50) NOT NULL,\n\tCONSTRAINT pk_dimcurrency_currencykey PRIMARY KEY (currencykey)\n);\nCREATE UNIQUE INDEX ak_dimcurrency_currencyalternatekey ON public.dimcurrency USING btree (currencyalternatekey);"
+    },
+    {
+      "name": "dimdate",
+      "description": "Date dimension",
+      "ddl": "CREATE TABLE public.dimdate (\n\tdatekey int4 NOT NULL,\n\tfulldatealternatekey date NOT NULL,\n\tdaynumberofweek int2 NOT NULL,\n\tenglishdaynameofweek varchar(10) NOT NULL,\n\tspanishdaynameofweek varchar(10) NOT NULL,\n\tfrenchdaynameofweek varchar(10) NOT NULL,\n\tdaynumberofmonth int2 NOT NULL,\n\tdaynumberofyear int2 NOT NULL,\n\tweeknumberofyear int2 NOT NULL,\n\tenglishmonthname varchar(10) NOT NULL,\n\tspanishmonthname varchar(10) NOT NULL,\n\tfrenchmonthname varchar(10) NOT NULL,\n\tmonthnumberofyear int2 NOT NULL,\n\tcalendarquarter int2 NOT NULL,\n\tcalendaryear int2 NOT NULL,\n\tcalendarsemester int2 NOT NULL,\n\tfiscalquarter int2 NOT NULL,\n\tfiscalyear int2 NOT NULL,\n\tfiscalsemester int2 NOT NULL,\n\tCONSTRAINT pk_dimdate_datekey PRIMARY KEY (datekey)\n);\nCREATE UNIQUE INDEX ak_dimdate_fulldatealternatekey ON public.dimdate USING btree (fulldatealternatekey);"
+    },
+    {
+      "name": "dimproductcategory",
+      "description": "Product category dimension",
+      "ddl": "CREATE TABLE public.dimproductcategory (\n\tproductcategorykey int4 DEFAULT nextval('dimproductcategory_seq'::regclass) NOT NULL,\n\tproductcategoryalternatekey int4 NULL,\n\tenglishproductcategoryname varchar(50) NOT NULL,\n\tspanishproductcategoryname varchar(50) NOT NULL,\n\tfrenchproductcategoryname varchar(50) NOT NULL,\n\tCONSTRAINT pk_dimproductcategory_productcategorykey PRIMARY KEY (productcategorykey)\n);\nCREATE UNIQUE INDEX ak_dimproductcategory_productcategoryalternatekey ON public.dimproductcategory USING btree (productcategoryalternatekey);"
+    },
+    {
+      "name": "dimpromotion",
+      "description": "Promotion dimension",
+      "ddl": "CREATE TABLE public.dimpromotion (\n\tpromotionkey int4 DEFAULT nextval('dimpromotion_seq'::regclass) NOT NULL,\n\tpromotionalternatekey int4 NULL,\n\tenglishpromotionname varchar(255) NULL,\n\tspanishpromotionname varchar(255) NULL,\n\tfrenchpromotionname varchar(255) NULL,\n\tdiscountpct float4 NULL,\n\tenglishpromotiontype varchar(50) NULL,\n\tspanishpromotiontype varchar(50) NULL,\n\tfrenchpromotiontype varchar(50) NULL,\n\tenglishpromotioncategory varchar(50) NULL,\n\tspanishpromotioncategory varchar(50) NULL,\n\tfrenchpromotioncategory varchar(50) NULL,\n\tstartdate timestamp NOT NULL,\n\tenddate timestamp NULL,\n\tminqty int4 NULL,\n\tmaxqty int4 NULL,\n\tCONSTRAINT pk_dimpromotion_promotionkey PRIMARY KEY (promotionkey)\n);\nCREATE UNIQUE INDEX ak_dimpromotion_promotionalternatekey ON public.dimpromotion USING btree (promotionalternatekey);"
+    },
+    {
+      "name": "dimsalesreason",
+      "description": "Sales reason dimension",
+      "ddl": "CREATE TABLE public.dimsalesreason (\n\tsalesreasonkey int4 DEFAULT nextval('dimsalesreason_seq'::regclass) NOT NULL,\n\tsalesreasonalternatekey int4 NOT NULL,\n\tsalesreasonname varchar(50) NOT NULL,\n\tsalesreasonreasontype varchar(50) NOT NULL,\n\tCONSTRAINT pk_dimsalesreason_salesreasonkey PRIMARY KEY (salesreasonkey)\n);"
+    },
+    {
+      "name": "dimsalesterritory",
+      "description": "Sales territory dimension",
+      "ddl": "CREATE TABLE public.dimsalesterritory (\n\tsalesterritorykey int4 DEFAULT nextval('dimsalesterritory_seq'::regclass) NOT NULL,\n\tsalesterritoryalternatekey int4 NULL,\n\tsalesterritoryregion varchar(50) NOT NULL,\n\tsalesterritorycountry varchar(50) NOT NULL,\n\tsalesterritorygroup varchar(50) NULL,\n\tsalesterritoryimage bytea NULL,\n\tCONSTRAINT pk_dimsalesterritory_salesterritorykey PRIMARY KEY (salesterritorykey)\n);\nCREATE UNIQUE INDEX ak_dimsalesterritory_salesterritoryalternatekey ON public.dimsalesterritory USING btree (salesterritoryalternatekey);"
+    },
+    {
+      "name": "dimscenario",
+      "description": "Scenario dimension",
+      "ddl": "CREATE TABLE public.dimscenario (\n\tscenariokey int4 DEFAULT nextval('dimscenario_seq'::regclass) NOT NULL,\n\tscenarioname varchar(50) NULL,\n\tCONSTRAINT pk_dimscenario PRIMARY KEY (scenariokey)\n);"
+    },
+    {
+      "name": "factadditionalinternationalproductdescription",
+      "description": "Additional international product descriptions",
+      "ddl": "CREATE TABLE public.factadditionalinternationalproductdescription (\n\tproductkey int4 NOT NULL,\n\tculturename varchar(50) NOT NULL,\n\tproductdescription text NOT NULL,\n\tCONSTRAINT pk_factadditionalinternationalproductdescription_productkey_cul PRIMARY KEY (productkey, culturename)\n);"
+    },
+    {
+      "name": "prospectivebuyer",
+      "description": "Prospective buyer staging-like table",
+      "ddl": "CREATE TABLE public.prospectivebuyer (\n\tprospectivebuyerkey int4 DEFAULT nextval('prospectivebuyer_seq'::regclass) NOT NULL,\n\tprospectalternatekey varchar(15) NULL,\n\tfirstname varchar(50) NULL,\n\tmiddlename varchar(50) NULL,\n\tlastname varchar(50) NULL,\n\tbirthdate timestamp NULL,\n\tmaritalstatus bpchar(1) NULL,\n\tgender varchar(1) NULL,\n\temailaddress varchar(50) NULL,\n\tyearlyincome money NULL,\n\ttotalchildren int2 NULL,\n\tnumberchildrenathome int2 NULL,\n\teducation varchar(40) NULL,\n\toccupation varchar(100) NULL,\n\thouseownerflag bpchar(1) NULL,\n\tnumbercarsowned int2 NULL,\n\taddressline1 varchar(120) NULL,\n\taddressline2 varchar(120) NULL,\n\tcity varchar(30) NULL,\n\tstateprovincecode varchar(3) NULL,\n\tpostalcode varchar(15) NULL,\n\tphone varchar(20) NULL,\n\tsalutation varchar(8) NULL,\n\t\"unknown\" int4 NULL,\n\tCONSTRAINT pk_prospectivebuyer_prospectivebuyerkey PRIMARY KEY (prospectivebuyerkey)\n);\nCREATE INDEX ix_prospectivebuyer_prospectalternatekey ON public.prospectivebuyer USING btree (prospectalternatekey);"
+    },
+    {
+      "name": "sysdiagrams",
+      "description": "System diagrams metadata",
+      "ddl": "CREATE TABLE public.sysdiagrams (\n\t\"name\" varchar(128) NOT NULL,\n\tprincipal_id int4 NOT NULL,\n\tdiagram_id int4 DEFAULT nextval('sysdiagrams_seq'::regclass) NOT NULL,\n\t\"version\" int4 NULL,\n\tdefinition bytea NULL,\n\tCONSTRAINT pk__sysdiagr__c2b05b616b24ea82 PRIMARY KEY (diagram_id)\n);\nCREATE UNIQUE INDEX uk_principal_name ON public.sysdiagrams USING btree (principal_id, name);"
+    },
+    {
+      "name": "vassocseqlineitems",
+      "description": "View-like table: association sequence line items",
+      "ddl": "CREATE TABLE public.vassocseqlineitems (\n\tordernumber varchar(20) NOT NULL,\n\tlinenumber int2 NOT NULL,\n\tmodel varchar(50) NULL\n);"
+    },
+    {
+      "name": "vassocseqorders",
+      "description": "View-like table: association sequence orders",
+      "ddl": "CREATE TABLE public.vassocseqorders (\n\tordernumber varchar(20) NOT NULL,\n\tcustomerkey int4 NOT NULL,\n\tregion varchar(50) NULL,\n\tincomegroup varchar(8) NOT NULL\n);"
+    },
+    {
+      "name": "vdmprep",
+      "description": "View-like table: DM prep",
+      "ddl": "CREATE TABLE public.vdmprep (\n\tenglishproductcategoryname varchar(50) NOT NULL,\n\tmodel varchar(50) NULL,\n\tcustomerkey int4 NOT NULL,\n\tregion varchar(50) NULL,\n\tage int4 NULL,\n\tincomegroup varchar(8) NOT NULL,\n\tcalendaryear int2 NOT NULL,\n\tfiscalyear int2 NOT NULL,\n\t\"month\" int2 NOT NULL,\n\tordernumber varchar(20) NOT NULL,\n\tlinenumber int2 NOT NULL,\n\tquantity int2 NOT NULL,\n\tamount money NOT NULL\n);"
+    },
+    {
+      "name": "vtargetmail",
+      "description": "View-like table: target mail",
+      "ddl": "CREATE TABLE public.vtargetmail (\n\tcustomerkey int4 NOT NULL,\n\tgeographykey int4 NULL,\n\tcustomeralternatekey varchar(15) NOT NULL,\n\ttitle varchar(8) NULL,\n\tfirstname varchar(50) NULL,\n\tmiddlename varchar(50) NULL,\n\tlastname varchar(50) NULL,\n\tnamestyle bool NULL,\n\tbirthdate date NULL,\n\tmaritalstatus bpchar(1) NULL,\n\tsuffix varchar(10) NULL,\n\tgender varchar(1) NULL,\n\temailaddress varchar(50) NULL,\n\tyearlyincome money NULL,\n\ttotalchildren int2 NULL,\n\tnumberchildrenathome int2 NULL,\n\tenglisheducation varchar(40) NULL,\n\tspanisheducation varchar(40) NULL,\n\tfrencheducation varchar(40) NULL,\n\tenglishoccupation varchar(100) NULL,\n\tspanishoccupation varchar(100) NULL,\n\tfrenchoccupation varchar(100) NULL,\n\thouseownerflag bpchar(1) NULL,\n\tnumbercarsowned int2 NULL,\n\taddressline1 varchar(120) NULL,\n\taddressline2 varchar(120) NULL,\n\tphone varchar(20) NULL,\n\tdatefirstpurchase date NULL,\n\tcommutedistance varchar(15) NULL,\n\tregion varchar(50) NULL,\n\tage int4 NULL,\n\tbikebuyer int4 NOT NULL\n);"
+    },
+    {
+      "name": "vtimeseries",
+      "description": "View-like table: time series summary",
+      "ddl": "CREATE TABLE public.vtimeseries (\n\tmodelregion varchar(56) NULL,\n\ttimeindex int4 NULL,\n\tquantity int4 NULL,\n\tamount money NULL,\n\tcalendaryear int2 NOT NULL,\n\t\"month\" int2 NOT NULL,\n\treportingdate timestamp NULL\n);"
+    },
+    {
+      "name": "dimaccount",
+      "description": "Account dimension",
+      "ddl": "CREATE TABLE public.dimaccount (\n\taccountkey int4 DEFAULT nextval('dimaccount_seq'::regclass) NOT NULL,\n\tparentaccountkey int4 NULL,\n\taccountcodealternatekey int4 NULL,\n\tparentaccountcodealternatekey int4 NULL,\n\taccountdescription varchar(50) NULL,\n\taccounttype varchar(50) NULL,\n\t\"operator\" varchar(50) NULL,\n\tcustommembers varchar(300) NULL,\n\tvaluetype varchar(50) NULL,\n\tcustommemberoptions varchar(200) NULL,\n\tCONSTRAINT pk_dimaccount PRIMARY KEY (accountkey),\n\tCONSTRAINT fk_dimaccount_dimaccount FOREIGN KEY (parentaccountkey) REFERENCES public.dimaccount(accountkey)\n);\nCREATE UNIQUE INDEX ak_dimaccount_accountcodealternatekey ON public.dimaccount USING btree (accountcodealternatekey);"
+    },
+    {
+      "name": "dimdepartmentgroup",
+      "description": "Department group dimension",
+      "ddl": "CREATE TABLE public.dimdepartmentgroup (\n\tdepartmentgroupkey int4 DEFAULT nextval('dimdepartmentgroup_seq'::regclass) NOT NULL,\n\tparentdepartmentgroupkey int4 NULL,\n\tdepartmentgroupname varchar(50) NULL,\n\tCONSTRAINT pk_dimdepartmentgroup PRIMARY KEY (departmentgroupkey),\n\tCONSTRAINT fk_dimdepartmentgroup_dimdepartmentgroup FOREIGN KEY (parentdepartmentgroupkey) REFERENCES public.dimdepartmentgroup(departmentgroupkey)\n);"
+    },
+    {
+      "name": "dimemployee",
+      "description": "Employee dimension",
+      "ddl": "CREATE TABLE public.dimemployee (\n\temployeekey int4 DEFAULT nextval('dimemployee_seq'::regclass) NOT NULL,\n\tparentemployeekey int4 NULL,\n\temployeenationalidalternatekey varchar(15) NULL,\n\tparentemployeenationalidalternatekey varchar(15) NULL,\n\tsalesterritorykey int4 NULL,\n\tfirstname varchar(50) NOT NULL,\n\tlastname varchar(50) NOT NULL,\n\tmiddlename varchar(50) NULL,\n\tnamestyle bool NOT NULL,\n\ttitle varchar(50) NULL,\n\thiredate date NULL,\n\tbirthdate date NULL,\n\tloginid varchar(256) NULL,\n\temailaddress varchar(50) NULL,\n\tphone varchar(25) NULL,\n\tmaritalstatus bpchar(1) NULL,\n\temergencycontactname varchar(50) NULL,\n\temergencycontactphone varchar(25) NULL,\n\tsalariedflag bool NULL,\n\tgender bpchar(1) NULL,\n\tpayfrequency int2 NULL,\n\tbaserate money NULL,\n\tvacationhours int2 NULL,\n\tsickleavehours int2 NULL,\n\tcurrentflag bool NOT NULL,\n\tsalespersonflag bool NOT NULL,\n\tdepartmentname varchar(50) NULL,\n\tstartdate date NULL,\n\tenddate date NULL,\n\tstatus varchar(50) NULL,\n\temployeephoto bytea NULL,\n\tCONSTRAINT pk_dimemployee_employeekey PRIMARY KEY (employeekey),\n\tCONSTRAINT fk_dimemployee_dimemployee FOREIGN KEY (parentemployeekey) REFERENCES public.dimemployee(employeekey),\n\tCONSTRAINT fk_dimemployee_dimsalesterritory FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)\n);\nCREATE INDEX ix_dimemployee_parentemployeekey ON public.dimemployee USING btree (parentemployeekey);\nCREATE INDEX ix_dimemployee_salesterritorykey ON public.dimemployee USING btree (salesterritorykey);"
+    },
+    {
+      "name": "dimgeography",
+      "description": "Geography dimension",
+      "ddl": "CREATE TABLE public.dimgeography (\n\tgeographykey int4 DEFAULT nextval('dimgeography_seq'::regclass) NOT NULL,\n\tcity varchar(30) NULL,\n\tstateprovincecode varchar(3) NULL,\n\tstateprovincename varchar(50) NULL,\n\tcountryregioncode varchar(3) NULL,\n\tenglishcountryregionname varchar(50) NULL,\n\tspanishcountryregionname varchar(50) NULL,\n\tfrenchcountryregionname varchar(50) NULL,\n\tpostalcode varchar(15) NULL,\n\tsalesterritorykey int4 NULL,\n\tipaddresslocator varchar(15) NULL,\n\tCONSTRAINT pk_dimgeography_geographykey PRIMARY KEY (geographykey),\n\tCONSTRAINT fk_dimgeography_dimsalesterritory FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)\n);"
+    },
+    {
+      "name": "dimorganization",
+      "description": "Organization dimension",
+      "ddl": "CREATE TABLE public.dimorganization (\n\torganizationkey int4 DEFAULT nextval('dimorganization_seq'::regclass) NOT NULL,\n\tparentorganizationkey int4 NULL,\n\tpercentageofownership varchar(16) NULL,\n\torganizationname varchar(50) NULL,\n\tcurrencykey int4 NULL,\n\tCONSTRAINT pk_dimorganization PRIMARY KEY (organizationkey),\n\tCONSTRAINT fk_dimorganization_dimcurrency FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey),\n\tCONSTRAINT fk_dimorganization_dimorganization FOREIGN KEY (parentorganizationkey) REFERENCES public.dimorganization(organizationkey)\n);"
+    },
+    {
+      "name": "dimproductsubcategory",
+      "description": "Product subcategory dimension",
+      "ddl": "CREATE TABLE public.dimproductsubcategory (\n\tproductsubcategorykey int4 DEFAULT nextval('dimproductsubcategory_seq'::regclass) NOT NULL,\n\tproductsubcategoryalternatekey int4 NULL,\n\tenglishproductsubcategoryname varchar(50) NOT NULL,\n\tspanishproductsubcategoryname varchar(50) NOT NULL,\n\tfrenchproductsubcategoryname varchar(50) NOT NULL,\n\tproductcategorykey int4 NULL,\n\tCONSTRAINT pk_dimproductsubcategory_productsubcategorykey PRIMARY KEY (productsubcategorykey),\n\tCONSTRAINT fk_dimproductsubcategory_dimproductcategory FOREIGN KEY (productcategorykey) REFERENCES public.dimproductcategory(productcategorykey)\n);\nCREATE UNIQUE INDEX ak_dimproductsubcategory_productsubcategoryalternatekey ON public.dimproductsubcategory USING btree (productsubcategoryalternatekey);"
+    },
+    {
+      "name": "dimreseller",
+      "description": "Reseller dimension",
+      "ddl": "CREATE TABLE public.dimreseller (\n\tresellerkey int4 DEFAULT nextval('dimreseller_seq'::regclass) NOT NULL,\n\tgeographykey int4 NULL,\n\treselleralternatekey varchar(15) NULL,\n\tphone varchar(25) NULL,\n\tbusinesstype varchar(20) NOT NULL,\n\tresellername varchar(50) NOT NULL,\n\tnumberemployees int4 NULL,\n\torderfrequency bpchar(1) NULL,\n\tordermonth int2 NULL,\n\tfirstorderyear int4 NULL,\n\tlastorderyear int4 NULL,\n\tproductline varchar(50) NULL,\n\taddressline1 varchar(60) NULL,\n\taddressline2 varchar(60) NULL,\n\tannualsales money NULL,\n\tbankname varchar(50) NULL,\n\tminpaymenttype int2 NULL,\n\tminpaymentamount money NULL,\n\tannualrevenue money NULL,\n\tyearopened int4 NULL,\n\tCONSTRAINT pk_dimreseller_resellerkey PRIMARY KEY (resellerkey),\n\tCONSTRAINT fk_dimreseller_dimgeography FOREIGN KEY (geographykey) REFERENCES public.dimgeography(geographykey)\n);\nCREATE UNIQUE INDEX ak_dimreseller_reselleralternatekey ON public.dimreseller USING btree (reselleralternatekey);\nCREATE INDEX ix_dimreseller_geographykey ON public.dimreseller USING btree (geographykey);"
+    },
+    {
+      "name": "factcallcenter",
+      "description": "Call center fact table",
+      "ddl": "CREATE TABLE public.factcallcenter (\n\tfactcallcenterid int4 DEFAULT nextval('factcallcenter_seq'::regclass) NOT NULL,\n\tdatekey int4 NOT NULL,\n\twagetype varchar(15) NOT NULL,\n\tshift varchar(20) NOT NULL,\n\tleveloneoperators int2 NOT NULL,\n\tleveltwooperators int2 NOT NULL,\n\ttotaloperators int2 NOT NULL,\n\tcalls int4 NOT NULL,\n\tautomaticresponses int4 NOT NULL,\n\torders int4 NOT NULL,\n\tissuesraised int2 NOT NULL,\n\taveragetimeperissue int2 NOT NULL,\n\tservicegrade float4 NOT NULL,\n\t\"date\" timestamp NULL,\n\tCONSTRAINT pk_factcallcenter_factcallcenterid PRIMARY KEY (factcallcenterid),\n\tCONSTRAINT fk_factcallcenter_dimdate FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)\n);\nCREATE UNIQUE INDEX ak_factcallcenter_datekey_shift ON public.factcallcenter USING btree (datekey, shift);"
+    },
+    {
+      "name": "factcurrencyrate",
+      "description": "Currency rate fact table",
+      "ddl": "CREATE TABLE public.factcurrencyrate (\n\tcurrencykey int4 NOT NULL,\n\tdatekey int4 NOT NULL,\n\taveragerate float4 NOT NULL,\n\tendofdayrate float4 NOT NULL,\n\t\"date\" timestamp NULL,\n\tCONSTRAINT pk_factcurrencyrate_currencykey_datekey PRIMARY KEY (currencykey, datekey),\n\tCONSTRAINT fk_factcurrencyrate_dimcurrency FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey),\n\tCONSTRAINT fk_factcurrencyrate_dimdate FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)\n);"
+    },
+    {
+      "name": "factfinance",
+      "description": "Finance fact table",
+      "ddl": "CREATE TABLE public.factfinance (\n\tfinancekey int4 DEFAULT nextval('factfinance_seq'::regclass) NOT NULL,\n\tdatekey int4 NOT NULL,\n\torganizationkey int4 NOT NULL,\n\tdepartmentgroupkey int4 NOT NULL,\n\tscenariokey int4 NOT NULL,\n\taccountkey int4 NOT NULL,\n\tamount float4 NOT NULL,\n\t\"date\" timestamp NULL,\n\tCONSTRAINT fk_factfinance_dimaccount FOREIGN KEY (accountkey) REFERENCES public.dimaccount(accountkey),\n\tCONSTRAINT fk_factfinance_dimdate FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factfinance_dimdepartmentgroup FOREIGN KEY (departmentgroupkey) REFERENCES public.dimdepartmentgroup(departmentgroupkey),\n\tCONSTRAINT fk_factfinance_dimorganization FOREIGN KEY (organizationkey) REFERENCES public.dimorganization(organizationkey),\n\tCONSTRAINT fk_factfinance_dimscenario FOREIGN KEY (scenariokey) REFERENCES public.dimscenario(scenariokey)\n);"
+    },
+    {
+      "name": "factsalesquota",
+      "description": "Sales quota fact table",
+      "ddl": "CREATE TABLE public.factsalesquota (\n\tsalesquotakey int4 DEFAULT nextval('factsalesquota_seq'::regclass) NOT NULL,\n\temployeekey int4 NOT NULL,\n\tdatekey int4 NOT NULL,\n\tcalendaryear int2 NOT NULL,\n\tcalendarquarter int2 NOT NULL,\n\tsalesamountquota money NOT NULL,\n\t\"date\" timestamp NULL,\n\tCONSTRAINT pk_factsalesquota_salesquotakey PRIMARY KEY (salesquotakey),\n\tCONSTRAINT fk_factsalesquota_dimdate FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factsalesquota_dimemployee FOREIGN KEY (employeekey) REFERENCES public.dimemployee(employeekey)\n);\nCREATE INDEX ix_factsalesquota_datekey ON public.factsalesquota USING btree (datekey);\nCREATE INDEX ix_factsalesquota_employeekey ON public.factsalesquota USING btree (employeekey);"
+    },
+    {
+      "name": "dimcustomer",
+      "description": "Customer dimension",
+      "ddl": "CREATE TABLE public.dimcustomer (\n\tcustomerkey int4 DEFAULT nextval('dimcustomer_seq'::regclass) NOT NULL,\n\tgeographykey int4 NULL,\n\tcustomeralternatekey varchar(15) NOT NULL,\n\ttitle varchar(8) NULL,\n\tfirstname varchar(50) NULL,\n\tmiddlename varchar(50) NULL,\n\tlastname varchar(50) NULL,\n\tnamestyle bool NULL,\n\tbirthdate date NULL,\n\tmaritalstatus bpchar(1) NULL,\n\tsuffix varchar(10) NULL,\n\tgender varchar(1) NULL,\n\temailaddress varchar(50) NULL,\n\tyearlyincome money NULL,\n\ttotalchildren int2 NULL,\n\tnumberchildrenathome int2 NULL,\n\tenglisheducation varchar(40) NULL,\n\tspanisheducation varchar(40) NULL,\n\tfrencheducation varchar(40) NULL,\n\tenglishoccupation varchar(100) NULL,\n\tspanishoccupation varchar(100) NULL,\n\tfrenchoccupation varchar(100) NULL,\n\thouseownerflag bpchar(1) NULL,\n\tnumbercarsowned int2 NULL,\n\taddressline1 varchar(120) NULL,\n\taddressline2 varchar(120) NULL,\n\tphone varchar(20) NULL,\n\tdatefirstpurchase date NULL,\n\tcommutedistance varchar(15) NULL,\n\tCONSTRAINT pk_dimcustomer_customerkey PRIMARY KEY (customerkey),\n\tCONSTRAINT fk_dimcustomer_dimgeography FOREIGN KEY (geographykey) REFERENCES public.dimgeography(geographykey)\n);\nCREATE UNIQUE INDEX ix_dimcustomer_customeralternatekey ON public.dimcustomer USING btree (customeralternatekey);\nCREATE INDEX ix_dimcustomer_geographykey ON public.dimcustomer USING btree (geographykey);"
+    },
+    {
+      "name": "dimproduct",
+      "description": "Product dimension",
+      "ddl": "CREATE TABLE public.dimproduct (\n\tproductkey int4 DEFAULT nextval('dimproduct_seq'::regclass) NOT NULL,\n\tproductalternatekey varchar(25) NULL,\n\tproductsubcategorykey int4 NULL,\n\tweightunitmeasurecode bpchar(3) NULL,\n\tsizeunitmeasurecode bpchar(3) NULL,\n\tenglishproductname varchar(50) NOT NULL,\n\tspanishproductname varchar(50) NOT NULL,\n\tfrenchproductname varchar(50) NOT NULL,\n\tstandardcost money NULL,\n\tfinishedgoodsflag bool NOT NULL,\n\tcolor varchar(15) NOT NULL,\n\tsafetystocklevel int2 NULL,\n\treorderpoint int2 NULL,\n\tlistprice money NULL,\n\t\"size\" varchar(50) NULL,\n\tsizerange varchar(50) NULL,\n\tweight float4 NULL,\n\tdaystomanufacture int4 NULL,\n\tproductline bpchar(2) NULL,\n\tdealerprice money NULL,\n\t\"class\" bpchar(2) NULL,\n\t\"style\" bpchar(2) NULL,\n\tmodelname varchar(50) NULL,\n\tlargephoto bytea NULL,\n\tenglishdescription varchar(400) NULL,\n\tfrenchdescription varchar(400) NULL,\n\tchinesedescription varchar(400) NULL,\n\tarabicdescription varchar(400) NULL,\n\thebrewdescription varchar(400) NULL,\n\tthaidescription varchar(400) NULL,\n\tgermandescription varchar(400) NULL,\n\tjapanesedescription varchar(400) NULL,\n\tturkishdescription varchar(400) NULL,\n\tstartdate timestamp NULL,\n\tenddate timestamp NULL,\n\tstatus varchar(7) NULL,\n\tCONSTRAINT pk_dimproduct_productkey PRIMARY KEY (productkey),\n\tCONSTRAINT fk_dimproduct_dimproductsubcategory FOREIGN KEY (productsubcategorykey) REFERENCES public.dimproductsubcategory(productsubcategorykey)\n);\nCREATE UNIQUE INDEX ak_dimproduct_productalternatekey_startdate ON public.dimproduct USING btree (productalternatekey, startdate);\nCREATE INDEX ix_dimproduct_productsubcategorykey ON public.dimproduct USING btree (productsubcategorykey);"
+    },
+    {
+      "name": "factinternetsales",
+      "description": "Internet sales fact table",
+      "ddl": "CREATE TABLE public.factinternetsales (\n\tproductkey int4 NOT NULL,\n\torderdatekey int4 NOT NULL,\n\tduedatekey int4 NOT NULL,\n\tshipdatekey int4 NOT NULL,\n\tcustomerkey int4 NOT NULL,\n\tpromotionkey int4 NOT NULL,\n\tcurrencykey int4 NOT NULL,\n\tsalesterritorykey int4 NOT NULL,\n\tsalesordernumber varchar(20) NOT NULL,\n\tsalesorderlinenumber int2 NOT NULL,\n\trevisionnumber int2 NOT NULL,\n\torderquantity int2 NOT NULL,\n\tunitprice money NOT NULL,\n\textendedamount money NOT NULL,\n\tunitpricediscountpct float4 NOT NULL,\n\tdiscountamount float4 NOT NULL,\n\tproductstandardcost money NOT NULL,\n\ttotalproductcost money NOT NULL,\n\tsalesamount money NOT NULL,\n\ttaxamt money NOT NULL,\n\tfreight money NOT NULL,\n\tcarriertrackingnumber varchar(25) NULL,\n\tcustomerponumber varchar(25) NULL,\n\torderdate timestamp NULL,\n\tduedate timestamp NULL,\n\tshipdate timestamp NULL,\n\tCONSTRAINT pk_factinternetsales_salesordernumber_salesorderlinenumber PRIMARY KEY (salesordernumber, salesorderlinenumber),\n\tCONSTRAINT fk_factinternetsales_dimcurrency FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey),\n\tCONSTRAINT fk_factinternetsales_dimcustomer FOREIGN KEY (customerkey) REFERENCES public.dimcustomer(customerkey),\n\tCONSTRAINT fk_factinternetsales_dimdate FOREIGN KEY (orderdatekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factinternetsales_dimdate1 FOREIGN KEY (duedatekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factinternetsales_dimdate2 FOREIGN KEY (shipdatekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factinternetsales_dimproduct FOREIGN KEY (productkey) REFERENCES public.dimproduct(productkey),\n\tCONSTRAINT fk_factinternetsales_dimpromotion FOREIGN KEY (promotionkey) REFERENCES public.dimpromotion(promotionkey),\n\tCONSTRAINT fk_factinternetsales_dimsalesterritory FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)\n);\nCREATE INDEX ix_factineternetsales_shipdatekey ON public.factinternetsales USING btree (shipdatekey);\nCREATE INDEX ix_factinternetsales_currencykey ON public.factinternetsales USING btree (currencykey);\nCREATE INDEX ix_factinternetsales_customerkey ON public.factinternetsales USING btree (customerkey);\nCREATE INDEX ix_factinternetsales_duedatekey ON public.factinternetsales USING btree (duedatekey);\nCREATE INDEX ix_factinternetsales_orderdatekey ON public.factinternetsales USING btree (orderdatekey);\nCREATE INDEX ix_factinternetsales_productkey ON public.factinternetsales USING btree (productkey);\nCREATE INDEX ix_factinternetsales_promotionkey ON public.factinternetsales USING btree (promotionkey);"
+    },
+    {
+      "name": "factinternetsalesreason",
+      "description": "Internet sales reason bridge fact table",
+      "ddl": "CREATE TABLE public.factinternetsalesreason (\n\tsalesordernumber varchar(20) NOT NULL,\n\tsalesorderlinenumber int2 NOT NULL,\n\tsalesreasonkey int4 NOT NULL,\n\tCONSTRAINT pk_factinternetsalesreason_salesordernumber_salesorderlinenumbe PRIMARY KEY (salesordernumber, salesorderlinenumber, salesreasonkey),\n\tCONSTRAINT fk_factinternetsalesreason_dimsalesreason FOREIGN KEY (salesreasonkey) REFERENCES public.dimsalesreason(salesreasonkey),\n\tCONSTRAINT fk_factinternetsalesreason_factinternetsales FOREIGN KEY (salesordernumber,salesorderlinenumber) REFERENCES public.factinternetsales(salesordernumber,salesorderlinenumber)\n);"
+    },
+    {
+      "name": "factproductinventory",
+      "description": "Product inventory fact table",
+      "ddl": "CREATE TABLE public.factproductinventory (\n\tproductkey int4 NOT NULL,\n\tdatekey int4 NOT NULL,\n\tmovementdate date NOT NULL,\n\tunitcost money NOT NULL,\n\tunitsin int4 NOT NULL,\n\tunitsout int4 NOT NULL,\n\tunitsbalance int4 NOT NULL,\n\tCONSTRAINT pk_factproductinventory PRIMARY KEY (productkey, datekey),\n\tCONSTRAINT fk_factproductinventory_dimdate FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factproductinventory_dimproduct FOREIGN KEY (productkey) REFERENCES public.dimproduct(productkey)\n);"
+    },
+    {
+      "name": "factresellersales",
+      "description": "Reseller sales fact table",
+      "ddl": "CREATE TABLE public.factresellersales (\n\tproductkey int4 NOT NULL,\n\torderdatekey int4 NOT NULL,\n\tduedatekey int4 NOT NULL,\n\tshipdatekey int4 NOT NULL,\n\tresellerkey int4 NOT NULL,\n\temployeekey int4 NOT NULL,\n\tpromotionkey int4 NOT NULL,\n\tcurrencykey int4 NOT NULL,\n\tsalesterritorykey int4 NOT NULL,\n\tsalesordernumber varchar(20) NOT NULL,\n\tsalesorderlinenumber int2 NOT NULL,\n\trevisionnumber int2 NULL,\n\torderquantity int2 NULL,\n\tunitprice money NULL,\n\textendedamount money NULL,\n\tunitpricediscountpct float4 NULL,\n\tdiscountamount float4 NULL,\n\tproductstandardcost money NULL,\n\ttotalproductcost money NULL,\n\tsalesamount money NULL,\n\ttaxamt money NULL,\n\tfreight money NULL,\n\tcarriertrackingnumber varchar(25) NULL,\n\tcustomerponumber varchar(25) NULL,\n\torderdate timestamp NULL,\n\tduedate timestamp NULL,\n\tshipdate timestamp NULL,\n\tCONSTRAINT pk_factresellersales_salesordernumber_salesorderlinenumber PRIMARY KEY (salesordernumber, salesorderlinenumber),\n\tCONSTRAINT fk_factresellersales_dimcurrency FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey),\n\tCONSTRAINT fk_factresellersales_dimdate FOREIGN KEY (orderdatekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factresellersales_dimdate1 FOREIGN KEY (duedatekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factresellersales_dimdate2 FOREIGN KEY (shipdatekey) REFERENCES public.dimdate(datekey),\n\tCONSTRAINT fk_factresellersales_dimemployee FOREIGN KEY (employeekey) REFERENCES public.dimemployee(employeekey),\n\tCONSTRAINT fk_factresellersales_dimproduct FOREIGN KEY (productkey) REFERENCES public.dimproduct(productkey),\n\tCONSTRAINT fk_factresellersales_dimpromotion FOREIGN KEY (promotionkey) REFERENCES public.dimpromotion(promotionkey),\n\tCONSTRAINT fk_factresellersales_dimreseller FOREIGN KEY (resellerkey) REFERENCES public.dimreseller(resellerkey),\n\tCONSTRAINT fk_factresellersales_dimsalesterritory FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)\n);\nCREATE INDEX ix_factresellersales_currencykey ON public.factresellersales USING btree (currencykey);\nCREATE INDEX ix_factresellersales_duedatekey ON public.factresellersales USING btree (duedatekey);\nCREATE INDEX ix_factresellersales_employeekey ON public.factresellersales USING btree (employeekey);\nCREATE INDEX ix_factresellersales_orderdatekey ON public.factresellersales USING btree (orderdatekey);\nCREATE INDEX ix_factresellersales_productkey ON public.factresellersales USING btree (productkey);\nCREATE INDEX ix_factresellersales_promotionkey ON public.factresellersales USING btree (promotionkey);\nCREATE INDEX ix_factresellersales_resellerkey ON public.factresellersales USING btree (resellerkey);\nCREATE INDEX ix_factresellersales_shipdatekey ON public.factresellersales USING btree (shipdatekey);"
+    },
+    {
+      "name": "factsurveyresponse",
+      "description": "Survey response fact table",
+      "ddl": "CREATE TABLE public.factsurveyresponse (\n\tsurveyresponsekey int4 DEFAULT nextval('factsurveyresponse_seq'::regclass) NOT NULL,\n\tdatekey int4 NOT NULL,\n\tcustomerkey int4 NOT NULL,\n\tproductcategorykey int4 NOT NULL,\n\tenglishproductcategoryname varchar(50) NOT NULL,\n\tproductsubcategorykey int4 NOT NULL,\n\tenglishproductsubcategoryname varchar(50) NOT NULL,\n\t\"date\" timestamp NULL,\n\tCONSTRAINT pk_factsurveyresponse_surveyresponsekey PRIMARY KEY (surveyresponsekey),\n\tCONSTRAINT fk_factsurveyresponse_customerkey FOREIGN KEY (customerkey) REFERENCES public.dimcustomer(customerkey),\n\tCONSTRAINT fk_factsurveyresponse_datekey FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)\n);\nCREATE INDEX ix_factsurveyresponse_customerkey ON public.factsurveyresponse USING btree (customerkey);\nCREATE INDEX ix_factsurveyresponse_datekey ON public.factsurveyresponse USING btree (datekey);\nCREATE INDEX ix_factsurveyresponse_productsubcategorykey ON public.factsurveyresponse USING btree (productsubcategorykey);"
+    }
+  ],
+  "relationships": [
+    {
+      "description": "dimaccount self-parent reference",
+      "constraint": "FOREIGN KEY (parentaccountkey) REFERENCES public.dimaccount(accountkey)"
+    },
+    {
+      "description": "dimdepartmentgroup self-parent reference",
+      "constraint": "FOREIGN KEY (parentdepartmentgroupkey) REFERENCES public.dimdepartmentgroup(departmentgroupkey)"
+    },
+    {
+      "description": "dimemployee parent employee reference",
+      "constraint": "FOREIGN KEY (parentemployeekey) REFERENCES public.dimemployee(employeekey)"
+    },
+    {
+      "description": "dimemployee to dimsalesterritory",
+      "constraint": "FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)"
+    },
+    {
+      "description": "dimgeography to dimsalesterritory",
+      "constraint": "FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)"
+    },
+    {
+      "description": "dimorganization to dimcurrency",
+      "constraint": "FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey)"
+    },
+    {
+      "description": "dimorganization self-parent reference",
+      "constraint": "FOREIGN KEY (parentorganizationkey) REFERENCES public.dimorganization(organizationkey)"
+    },
+    {
+      "description": "dimproductsubcategory to dimproductcategory",
+      "constraint": "FOREIGN KEY (productcategorykey) REFERENCES public.dimproductcategory(productcategorykey)"
+    },
+    {
+      "description": "dimreseller to dimgeography",
+      "constraint": "FOREIGN KEY (geographykey) REFERENCES public.dimgeography(geographykey)"
+    },
+    {
+      "description": "dimcustomer to dimgeography",
+      "constraint": "FOREIGN KEY (geographykey) REFERENCES public.dimgeography(geographykey)"
+    },
+    {
+      "description": "dimproduct to dimproductsubcategory",
+      "constraint": "FOREIGN KEY (productsubcategorykey) REFERENCES public.dimproductsubcategory(productsubcategorykey)"
+    },
+    {
+      "description": "factcallcenter to dimdate",
+      "constraint": "FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factcurrencyrate to dimcurrency",
+      "constraint": "FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey)"
+    },
+    {
+      "description": "factcurrencyrate to dimdate",
+      "constraint": "FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factfinance to dimaccount",
+      "constraint": "FOREIGN KEY (accountkey) REFERENCES public.dimaccount(accountkey)"
+    },
+    {
+      "description": "factfinance to dimdate",
+      "constraint": "FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factfinance to dimdepartmentgroup",
+      "constraint": "FOREIGN KEY (departmentgroupkey) REFERENCES public.dimdepartmentgroup(departmentgroupkey)"
+    },
+    {
+      "description": "factfinance to dimorganization",
+      "constraint": "FOREIGN KEY (organizationkey) REFERENCES public.dimorganization(organizationkey)"
+    },
+    {
+      "description": "factfinance to dimscenario",
+      "constraint": "FOREIGN KEY (scenariokey) REFERENCES public.dimscenario(scenariokey)"
+    },
+    {
+      "description": "factsalesquota to dimdate",
+      "constraint": "FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factsalesquota to dimemployee",
+      "constraint": "FOREIGN KEY (employeekey) REFERENCES public.dimemployee(employeekey)"
+    },
+    {
+      "description": "factinternetsales to dimcurrency",
+      "constraint": "FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey)"
+    },
+    {
+      "description": "factinternetsales to dimcustomer",
+      "constraint": "FOREIGN KEY (customerkey) REFERENCES public.dimcustomer(customerkey)"
+    },
+    {
+      "description": "factinternetsales to dimdate (order)",
+      "constraint": "FOREIGN KEY (orderdatekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factinternetsales to dimdate (due)",
+      "constraint": "FOREIGN KEY (duedatekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factinternetsales to dimdate (ship)",
+      "constraint": "FOREIGN KEY (shipdatekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factinternetsales to dimproduct",
+      "constraint": "FOREIGN KEY (productkey) REFERENCES public.dimproduct(productkey)"
+    },
+    {
+      "description": "factinternetsales to dimpromotion",
+      "constraint": "FOREIGN KEY (promotionkey) REFERENCES public.dimpromotion(promotionkey)"
+    },
+    {
+      "description": "factinternetsales to dimsalesterritory",
+      "constraint": "FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)"
+    },
+    {
+      "description": "factinternetsalesreason to dimsalesreason",
+      "constraint": "FOREIGN KEY (salesreasonkey) REFERENCES public.dimsalesreason(salesreasonkey)"
+    },
+    {
+      "description": "factinternetsalesreason to factinternetsales",
+      "constraint": "FOREIGN KEY (salesordernumber, salesorderlinenumber) REFERENCES public.factinternetsales(salesordernumber, salesorderlinenumber)"
+    },
+    {
+      "description": "factproductinventory to dimdate",
+      "constraint": "FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factproductinventory to dimproduct",
+      "constraint": "FOREIGN KEY (productkey) REFERENCES public.dimproduct(productkey)"
+    },
+    {
+      "description": "factresellersales to dimcurrency",
+      "constraint": "FOREIGN KEY (currencykey) REFERENCES public.dimcurrency(currencykey)"
+    },
+    {
+      "description": "factresellersales to dimdate (order)",
+      "constraint": "FOREIGN KEY (orderdatekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factresellersales to dimdate (due)",
+      "constraint": "FOREIGN KEY (duedatekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factresellersales to dimdate (ship)",
+      "constraint": "FOREIGN KEY (shipdatekey) REFERENCES public.dimdate(datekey)"
+    },
+    {
+      "description": "factresellersales to dimemployee",
+      "constraint": "FOREIGN KEY (employeekey) REFERENCES public.dimemployee(employeekey)"
+    },
+    {
+      "description": "factresellersales to dimproduct",
+      "constraint": "FOREIGN KEY (productkey) REFERENCES public.dimproduct(productkey)"
+    },
+    {
+      "description": "factresellersales to dimpromotion",
+      "constraint": "FOREIGN KEY (promotionkey) REFERENCES public.dimpromotion(promotionkey)"
+    },
+    {
+      "description": "factresellersales to dimreseller",
+      "constraint": "FOREIGN KEY (resellerkey) REFERENCES public.dimreseller(resellerkey)"
+    },
+    {
+      "description": "factresellersales to dimsalesterritory",
+      "constraint": "FOREIGN KEY (salesterritorykey) REFERENCES public.dimsalesterritory(salesterritorykey)"
+    },
+    {
+      "description": "factsurveyresponse to dimcustomer",
+      "constraint": "FOREIGN KEY (customerkey) REFERENCES public.dimcustomer(customerkey)"
+    },
+    {
+      "description": "factsurveyresponse to dimdate",
+      "constraint": "FOREIGN KEY (datekey) REFERENCES public.dimdate(datekey)"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "ddl_statements": [
+    {
+      "id": "ddl_001",
+      "table_name": "DimCustomer",
+      "ddl": "CREATE TABLE DimCustomer (\n  CustomerKey INT PRIMARY KEY,\n  CustomerAlternateKey VARCHAR(15),\n  FirstName VARCHAR(50),\n  LastName VARCHAR(50),\n  BirthDate DATE,\n  Gender VARCHAR(1),\n  EmailAddress VARCHAR(50),\n  YearlyIncome DECIMAL(19,4),\n  TotalChildren INT,\n  EnglishEducation VARCHAR(40),\n  EnglishOccupation VARCHAR(100)\n);"
+    },
+    {
+      "id": "ddl_002",
+      "table_name": "FactInternetSales",
+      "ddl": "CREATE TABLE FactInternetSales (\n  ProductKey INT,\n  OrderDateKey INT,\n  CustomerKey INT,\n  SalesOrderNumber VARCHAR(20),\n  SalesAmount DECIMAL(19,4),\n  TaxAmt DECIMAL(19,4),\n  Freight DECIMAL(19,4),\n  OrderQuantity INT,\n  FOREIGN KEY (CustomerKey) REFERENCES DimCustomer(CustomerKey),\n  FOREIGN KEY (ProductKey) REFERENCES DimProduct(ProductKey)\n);"
+    },
+    {
+      "id": "ddl_003",
+      "table_name": "DimProduct",
+      "ddl": "CREATE TABLE DimProduct (\n  ProductKey INT PRIMARY KEY,\n  ProductAlternateKey VARCHAR(25),\n  EnglishProductName VARCHAR(50),\n  StandardCost DECIMAL(19,4),\n  ListPrice DECIMAL(19,4),\n  Size VARCHAR(50),\n  Weight DECIMAL(8,2),\n  ProductLine VARCHAR(2),\n  DealerPrice DECIMAL(19,4),\n  Class VARCHAR(2),\n  Style VARCHAR(2)\n);"
+    },
+    {
+      "id": "ddl_004",
+      "table_name": "DimDate",
+      "ddl": "CREATE TABLE DimDate (\n  DateKey INT PRIMARY KEY,\n  FullDateAlternateKey DATE,\n  DayNumberOfWeek INT,\n  EnglishDayNameOfWeek VARCHAR(10),\n  DayNumberOfMonth INT,\n  DayNumberOfYear INT,\n  WeekNumberOfYear INT,\n  EnglishMonthName VARCHAR(10),\n  MonthNumberOfYear INT,\n  CalendarQuarter INT,\n  CalendarYear INT,\n  CalendarSemester INT,\n  FiscalQuarter INT,\n  FiscalYear INT\n);"
+    },
+    {
+      "id": "ddl_005",
+      "table_name": "DimGeography",
+      "ddl": "CREATE TABLE DimGeography (\n  GeographyKey INT PRIMARY KEY,\n  City VARCHAR(30),\n  StateProvinceCode VARCHAR(3),\n  StateProvinceName VARCHAR(50),\n  CountryRegionCode VARCHAR(3),\n  EnglishCountryRegionName VARCHAR(50),\n  PostalCode VARCHAR(15)\n);"
+    }
+  ]
+}

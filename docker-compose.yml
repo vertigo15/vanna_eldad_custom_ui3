@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  pgvector-db:
+    image: pgvector/pgvector:0.8.0-pg16
+    container_name: pgvector-db
+    environment:
+      POSTGRES_DB: vanna_vectors
+      POSTGRES_USER: vanna
+      POSTGRES_PASSWORD: vanna_secure_password_123
+    ports:
+      - "5433:5432"  # External 5433 to avoid conflict
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+      - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vanna -d vanna_vectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vanna-network
+
+  vanna-app:
+    build: .
+    container_name: vanna-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      pgvector-db:
+        condition: service_healthy
+    volumes:
+      - ./training_data:/app/training_data
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+    networks:
+      - vanna-network
+
+  vanna-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: vanna-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://vanna-app:8000
+      - UI_PORT=8501
+    depends_on:
+      - vanna-app
+    volumes:
+      - ./src:/app/src
+    networks:
+      - vanna-network
+
+volumes:
+  pgvector_data:
+
+networks:
+  vanna-network:
+    driver: bridge
