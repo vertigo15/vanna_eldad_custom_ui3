@@ -1,0 +1,222 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.0.3 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36" version="29.0.3">
+  <diagram name="Vanna 2.0 Architecture" id="architecture">
+    <mxGraphModel dx="3855" dy="1001" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Vanna 2.0 Text-to-SQL Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="400" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="docker-container" value="Docker Compose Environment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=16;fontStyle=1;arcSize=3;" parent="1" vertex="1">
+          <mxGeometry x="80" y="100" width="1240" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="user" value="User" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+          <mxGeometry x="-130" y="180" width="60" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-container" value="ui" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;align=center;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="140" y="150" width="240" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-flask" value="Flask Web UI&#xa;&#xa;• Natural Language Input&#xa;• SQL Display&#xa;• Results Visualization&#xa;• Sample Questions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=10;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="160" y="190" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ui-port" value="Port: 8501" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="140" y="305" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-container" value="vanna-app" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;align=center;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="140" y="380" width="240" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-fastapi" value="FastAPI Application" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="160" y="420" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-agent" value="Vanna Agent&#xa;(Orchestrator)&#xa;&#xa;• Question Processing&#xa;• RAG Retrieval&#xa;• SQL Generation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=10;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="160" y="480" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-llm" value="Azure OpenAI Service&#xa;&#xa;• LLM: GPT-5.1&#xa;• Embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=10;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="160" y="600" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-sql" value="SQL Tool&#xa;&#xa;• Query Execution&#xa;• Result Formatting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=10;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="160" y="690" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-port" value="Port: 8000" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="140" y="735" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-container" value="pgvector-db" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;verticalAlign=top;align=center;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="460" y="150" width="260" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-db" value="PostgreSQL + pgvector" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="480" y="190" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-ddl" value="vanna_ddl&#xa;(Schema Embeddings)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="480" y="250" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-docs" value="vanna_documentation&#xa;(Business Rules)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="480" y="310" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-examples" value="vanna_sql_examples&#xa;(Question-SQL Pairs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="480" y="370" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-memory" value="vanna_tool_memory&#xa;(Past Queries)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="480" y="430" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pgvector-port" value="Port: 5433" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="460" y="140" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="azure-container" value="Azure Cloud Services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#0078d4;verticalAlign=top;align=center;fontSize=14;fontStyle=1;strokeWidth=2;" parent="1" vertex="1">
+          <mxGeometry x="800" y="150" width="240" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="azure-openai" value="Azure OpenAI API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="820" y="190" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="azure-gpt" value="GPT-5.1&#xa;(SQL Generation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#36393d;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="820" y="250" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="azure-embedding" value="text-embedding-3-large-2&#xa;(Vector Embeddings)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#36393d;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="820" y="320" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="datasource-container" value="AdventureWorksDW" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;align=center;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="800" y="420" width="240" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="datasource-pg" value="PostgreSQL Database" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="820" y="460" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="datasource-tables" value="• FactInternetSales&#xa;• DimCustomer&#xa;• DimProduct&#xa;• DimDate&#xa;• etc." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=10;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="820" y="520" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="training-container" value="Training Data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;align=center;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="460" y="530" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="training-ddl" value="ddl.json&#xa;(5 Schema Definitions)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="480" y="570" width="220" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="training-docs" value="documentation.json&#xa;(5 Business Rules)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="480" y="610" width="220" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="training-sql" value="sql_examples.json&#xa;(8 Question-SQL Pairs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="480" y="650" width="220" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-flow" value="RAG Process Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;align=center;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="1080" y="150" width="220" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step1" value="1. User Question" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="1100" y="190" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step2" value="2. Embed Question&#xa;(Azure Embeddings)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="1100" y="250" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step3" value="3. Vector Search&#xa;(pgvector)&#xa;• DDL&#xa;• Docs&#xa;• Examples" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=10;" parent="1" vertex="1">
+          <mxGeometry x="1100" y="320" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step4" value="4. Context Augmentation&#xa;(Inject Retrieved Context)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="1100" y="420" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step5" value="5. SQL Generation&#xa;(Azure OpenAI GPT-5.1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="1100" y="490" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step6" value="6. Execute SQL&#xa;(AdventureWorksDW)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="1100" y="560" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rag-step7" value="7. Store Success&#xa;(Update Memory)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="1100" y="630" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-user-ui" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" source="user" target="ui-container" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="100" y="360" as="sourcePoint" />
+            <mxPoint x="150" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-user-ui-label" value="HTTP&#xa;8501" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" parent="arrow-user-ui" vertex="1" connectable="0">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="5" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-ui-backend" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" source="ui-container" target="backend-container" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="260" y="330" as="sourcePoint" />
+            <mxPoint x="260" y="380" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-ui-backend-label" value="API Calls" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" parent="arrow-ui-backend" vertex="1" connectable="0">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-backend-pgvector" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;fillColor=#ffe6cc;strokeColor=#d79b00;startArrow=classic;startFill=1;" parent="1" source="backend-container" target="pgvector-container" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="380" y="475" as="sourcePoint" />
+            <mxPoint x="460" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-backend-pgvector-label" value="Vector&#xa;Retrieval" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" parent="arrow-backend-pgvector" vertex="1" connectable="0">
+          <mxGeometry x="0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="-5" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-backend-azure" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;fillColor=#dae8fc;strokeColor=#0078d4;startArrow=classic;startFill=1;edgeStyle=orthogonalEdgeStyle;" parent="1" source="backend-llm" target="azure-container" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="635" as="sourcePoint" />
+            <mxPoint x="800" y="260" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="360" y="740" />
+              <mxPoint x="750" y="740" />
+              <mxPoint x="750" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-backend-azure-label" value="LLM API&#xa;Embeddings" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" parent="arrow-backend-azure" vertex="1" connectable="0">
+          <mxGeometry x="0.3" y="2" relative="1" as="geometry">
+            <mxPoint x="35" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-backend-datasource" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;fillColor=#e1d5e7;strokeColor=#9673a6;startArrow=classic;startFill=1;edgeStyle=orthogonalEdgeStyle;" parent="1" source="backend-sql" target="datasource-container" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="740" as="sourcePoint" />
+            <mxPoint x="800" y="500" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="360" y="640" />
+              <mxPoint x="430" y="640" />
+              <mxPoint x="430" y="500" />
+              <mxPoint x="800" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-backend-datasource-label" value="SQL&#xa;Queries" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" parent="arrow-backend-datasource" vertex="1" connectable="0">
+          <mxGeometry x="0.5" y="2" relative="1" as="geometry">
+            <mxPoint x="95" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-training-pgvector" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeWidth=2;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" parent="1" source="training-container" target="pgvector-container" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="590" y="530" as="sourcePoint" />
+            <mxPoint x="590" y="470" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow-training-pgvector-label" value="Load&#xa;Training&#xa;Data" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" parent="arrow-training-pgvector" vertex="1" connectable="0">
+          <mxGeometry y="1" relative="1" as="geometry">
+            <mxPoint x="20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-container" value="Legend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;align=center;fontSize=12;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="1080" y="710" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-sync" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#82b366;startArrow=classic;startFill=1;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1100" y="745" as="sourcePoint" />
+            <mxPoint x="1150" y="745" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-sync-label" value="Sync Communication" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="1160" y="735" width="120" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-async" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1100" y="770" as="sourcePoint" />
+            <mxPoint x="1150" y="770" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-async-label" value="Async/Setup" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="1160" y="760" width="120" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

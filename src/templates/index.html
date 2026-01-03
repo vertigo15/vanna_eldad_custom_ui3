@@ -54,10 +54,20 @@
                         <div id="results-display" class="results-display"></div>
                     </div>
 
+                    <div class="result-card" id="explanation-card" style="display: none;">
+                        <h2>💡 Explanation</h2>
+                        <p id="explanation-display" class="explanation-display"></p>
+                    </div>
+
                     <div class="result-card">
                         <h2>💻 Generated SQL</h2>
-                        <pre id="sql-display" class="sql-display"></pre>
-                        <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                        <button class="toggle-prompt-button" onclick="toggleSql()" id="toggle-sql-btn">
+                            ▼ View SQL
+                        </button>
+                        <div id="sql-content" class="prompt-content" style="display: none;">
+                            <pre id="sql-display" class="sql-display"></pre>
+                            <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                        </div>
                         
                         <div class="prompt-section" id="prompt-section" style="display: none;">
                             <button class="toggle-prompt-button" onclick="togglePrompt()" id="toggle-prompt-btn">
@@ -68,11 +78,6 @@
                                 <pre id="prompt-display" class="prompt-display"></pre>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="result-card" id="explanation-card" style="display: none;">
-                        <h2>💡 Explanation</h2>
-                        <p id="explanation-display" class="explanation-display"></p>
                     </div>
                 </div>
             </div>

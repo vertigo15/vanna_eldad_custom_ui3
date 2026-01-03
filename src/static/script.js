@@ -4,6 +4,7 @@ let currentResults = null;
 let currentPrompt = '';
 let allTables = [];
 let promptExpanded = false;
+let sqlExpanded = false;
 let sortColumn = null;
 let sortDirection = 'asc';
 let filterText = '';
@@ -53,6 +54,10 @@ async function askQuestion() {
 
 // Display results
 function displayResults(data) {
+    // Reset toggle states
+    sqlExpanded = false;
+    promptExpanded = false;
+    
     // Show results section
     const resultsSection = document.getElementById('results-section');
     resultsSection.style.display = 'flex';
@@ -330,6 +335,22 @@ function copyResults() {
     }).catch(err => {
         console.error('Failed to copy:', err);
     });
+}
+
+// Toggle SQL display
+function toggleSql() {
+    const sqlContent = document.getElementById('sql-content');
+    const toggleBtn = document.getElementById('toggle-sql-btn');
+    
+    sqlExpanded = !sqlExpanded;
+    
+    if (sqlExpanded) {
+        sqlContent.style.display = 'block';
+        toggleBtn.textContent = '▲ Hide SQL';
+    } else {
+        sqlContent.style.display = 'none';
+        toggleBtn.textContent = '▼ View SQL';
+    }
 }
 
 // Toggle prompt display
