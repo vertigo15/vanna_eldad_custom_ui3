@@ -1,13 +1,19 @@
+// Import chart manager
+import { ChartManager } from './chart-feature/chartManager.js';
+
 // UI State
 let currentSql = '';
 let currentResults = null;
 let currentPrompt = '';
+let currentQuestion = '';
 let allTables = [];
 let promptExpanded = false;
 let sqlExpanded = false;
 let sortColumn = null;
 let sortDirection = 'asc';
 let filterText = '';
+let chartManager = null;
+let insightsManager = null;
 
 // Ask question
 async function askQuestion() {
@@ -58,6 +64,9 @@ function displayResults(data) {
     sqlExpanded = false;
     promptExpanded = false;
     
+    // Store current question
+    currentQuestion = data.question;
+    
     // Show results section
     const resultsSection = document.getElementById('results-section');
     resultsSection.style.display = 'flex';
@@ -87,21 +96,48 @@ function displayResults(data) {
     const exportBtn = document.getElementById('export-btn');
     const copyResultsBtn = document.getElementById('copy-results-btn');
     
+    const describeBtn = document.getElementById('describe-btn');
+    
     if (data.error) {
         resultsDisplay.innerHTML = `<div class="error-message">${data.error}</div>`;
         exportBtn.style.display = 'none';
         copyResultsBtn.style.display = 'none';
+        describeBtn.style.display = 'none';
         currentResults = null;
+        window.currentResults = null;
+        if (typeof profilingManager !== 'undefined') {
+            profilingManager.hide();
+        }
     } else if (data.results && data.results.columns && (data.results.data || data.results.rows)) {
         currentResults = data.results;
         resultsDisplay.innerHTML = formatResultsAsTable(data.results);
         exportBtn.style.display = 'inline-block';
         copyResultsBtn.style.display = 'inline-block';
+        describeBtn.style.display = 'inline-block';
+        
+        // Store results globally for profiling manager
+        window.currentResults = data.results;
+        
+        // Initialize chart feature
+        initializeChartFeature(data.results);
+        
+        // Generate insights in parallel (non-blocking)
+        generateInsights(data.results, currentQuestion);
+        
+        // Initialize profiling section (collapsed by default)
+        if (typeof profilingManager !== 'undefined') {
+            profilingManager.initialize(data.results);
+        }
     } else {
         resultsDisplay.innerHTML = '<div class="no-results">No results to display</div>';
         exportBtn.style.display = 'none';
         copyResultsBtn.style.display = 'none';
+        describeBtn.style.display = 'none';
         currentResults = null;
+        window.currentResults = null;
+        if (typeof profilingManager !== 'undefined') {
+            profilingManager.hide();
+        }
     }
     
     // Handle prompt if available - always show if SQL was generated
@@ -538,6 +574,181 @@ function clearHistory() {
         displayHistory();
     }
 }
+
+// Chart Feature Initialization
+function initializeChartFeature(results) {
+    // Dispose previous chart manager if exists
+    if (chartManager) {
+        chartManager.dispose();
+    }
+    
+    // Create new chart manager
+    chartManager = new ChartManager();
+    chartManager.initialize(results);
+}
+
+// Insights Feature
+function generateInsights(results, question) {
+    // Initialize insights manager if needed
+    if (!insightsManager) {
+        insightsManager = new window.InsightsManager();
+    }
+    
+    // Show insights container
+    const insightsContainer = document.getElementById('insights-container');
+    if (insightsContainer) {
+        insightsContainer.style.display = 'block';
+    }
+    
+    // Generate insights asynchronously (non-blocking)
+    setTimeout(() => {
+        insightsManager.generateInsights(results, question);
+    }, 0);
+}
+
+// Describe Feature - Statistical Summary
+let describeExpanded = false;
+
+function toggleDescribe() {
+    const describeSection = document.getElementById('describe-section');
+    const describeBtn = document.getElementById('describe-btn');
+    
+    if (!currentResults) return;
+    
+    if (describeExpanded) {
+        // Hide describe section
+        describeSection.style.display = 'none';
+        describeBtn.textContent = '📊 Describe';
+        describeExpanded = false;
+    } else {
+        // Generate and show statistics
+        const stats = calculateStatistics(currentResults);
+        describeSection.innerHTML = formatStatistics(stats);
+        describeSection.style.display = 'block';
+        describeBtn.textContent = '📊 Hide Description';
+        describeExpanded = true;
+    }
+}
+
+// Calculate statistics similar to pandas df.describe()
+function calculateStatistics(results) {
+    const rows = results.data || results.rows;
+    const columns = results.columns;
+    const stats = {};
+    
+    columns.forEach((column, colIndex) => {
+        const values = [];
+        
+        // Extract column values
+        rows.forEach(row => {
+            const value = Array.isArray(row) ? row[colIndex] : row[column];
+            if (value !== null && value !== undefined && value !== '') {
+                values.push(value);
+            }
+        });
+        
+        // Determine if numeric
+        const numericValues = values.filter(v => !isNaN(parseFloat(v))).map(v => parseFloat(v));
+        const isNumeric = numericValues.length > values.length * 0.5;
+        
+        if (isNumeric && numericValues.length > 0) {
+            // Calculate numeric statistics
+            const sorted = numericValues.slice().sort((a, b) => a - b);
+            const sum = numericValues.reduce((a, b) => a + b, 0);
+            const mean = sum / numericValues.length;
+            const median = sorted.length % 2 === 0
+                ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+                : sorted[Math.floor(sorted.length / 2)];
+            
+            // Calculate standard deviation
+            const variance = numericValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / numericValues.length;
+            const std = Math.sqrt(variance);
+            
+            // Calculate quartiles
+            const q1 = sorted[Math.floor(sorted.length * 0.25)];
+            const q3 = sorted[Math.floor(sorted.length * 0.75)];
+            
+            stats[column] = {
+                type: 'numeric',
+                count: numericValues.length,
+                mean: mean,
+                std: std,
+                min: sorted[0],
+                q25: q1,
+                median: median,
+                q75: q3,
+                max: sorted[sorted.length - 1]
+            };
+        } else {
+            // Calculate categorical statistics
+            const uniqueValues = new Set(values);
+            const valueCounts = {};
+            values.forEach(v => {
+                valueCounts[v] = (valueCounts[v] || 0) + 1;
+            });
+            const topValue = Object.entries(valueCounts).sort((a, b) => b[1] - a[1])[0];
+            
+            stats[column] = {
+                type: 'categorical',
+                count: values.length,
+                unique: uniqueValues.size,
+                top: topValue ? topValue[0] : null,
+                freq: topValue ? topValue[1] : null
+            };
+        }
+    });
+    
+    return stats;
+}
+
+// Format statistics as HTML
+function formatStatistics(stats) {
+    let html = '<h3 style="margin-bottom: 15px;">📊 Statistical Summary</h3>';
+    html += '<div class="stats-container">';
+    
+    Object.entries(stats).forEach(([column, stat]) => {
+        html += '<div class="stat-column">';
+        html += `<h4>${escapeHtml(column)}</h4>`;
+        
+        if (stat.type === 'numeric') {
+            html += '<table class="stats-table">';
+            html += `<tr><td>Count</td><td>${stat.count}</td></tr>`;
+            html += `<tr><td>Mean</td><td>${stat.mean.toFixed(2)}</td></tr>`;
+            html += `<tr><td>Std</td><td>${stat.std.toFixed(2)}</td></tr>`;
+            html += `<tr><td>Min</td><td>${stat.min.toFixed(2)}</td></tr>`;
+            html += `<tr><td>25%</td><td>${stat.q25.toFixed(2)}</td></tr>`;
+            html += `<tr><td>50% (Median)</td><td>${stat.median.toFixed(2)}</td></tr>`;
+            html += `<tr><td>75%</td><td>${stat.q75.toFixed(2)}</td></tr>`;
+            html += `<tr><td>Max</td><td>${stat.max.toFixed(2)}</td></tr>`;
+            html += '</table>';
+        } else {
+            html += '<table class="stats-table">';
+            html += `<tr><td>Count</td><td>${stat.count}</td></tr>`;
+            html += `<tr><td>Unique</td><td>${stat.unique}</td></tr>`;
+            html += `<tr><td>Top</td><td>${escapeHtml(String(stat.top))}</td></tr>`;
+            html += `<tr><td>Freq</td><td>${stat.freq}</td></tr>`;
+            html += '</table>';
+        }
+        
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// Make functions globally accessible for onclick handlers
+window.askQuestion = askQuestion;
+window.toggleSql = toggleSql;
+window.togglePrompt = togglePrompt;
+window.copySql = copySql;
+window.copyResults = copyResults;
+window.exportToExcel = exportToExcel;
+window.loadTables = loadTables;
+window.filterTables = filterTables;
+window.fillQuestion = fillQuestion;
+window.clearHistory = clearHistory;
+window.toggleDescribe = toggleDescribe;
 
 // Enter key to submit
 document.addEventListener('DOMContentLoaded', () => {

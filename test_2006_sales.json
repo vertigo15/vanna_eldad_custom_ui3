@@ -1,0 +1,23 @@
+{
+  "columns": [
+    {"name": "calendaryear", "type": "numeric"},
+    {"name": "month", "type": "numeric"},
+    {"name": "month_name", "type": "category"},
+    {"name": "total_sales", "type": "numeric"}
+  ],
+  "column_names": ["calendaryear", "month", "month_name", "total_sales"],
+  "sample_data": [
+    [2006, 1, "Jan", 596746.60],
+    [2006, 2, "Feb", 550816.73],
+    [2006, 3, "Mar", 644135.24],
+    [2006, 4, "Apr", 663692.33],
+    [2006, 5, "May", 673556.25],
+    [2006, 6, "Jun", 676763.70],
+    [2006, 7, "Jul", 500365.03],
+    [2006, 8, "Aug", 546001.36],
+    [2006, 9, "Sep", 350466.93],
+    [2006, 10, "Oct", 415390.22],
+    [2006, 11, "Nov", 335095.07],
+    [2006, 12, "Dec", 577314.03]
+  ]
+}

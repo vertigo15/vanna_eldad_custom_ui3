@@ -454,3 +454,675 @@ main {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
+
+/* ======================================
+   Chart Feature Styles
+   ====================================== */
+
+/* Chart Toggle Buttons */
+.chart-toggle-wrapper {
+    margin-bottom: 15px;
+}
+
+.view-toggle-group {
+    display: inline-flex;
+    gap: 0;
+    background: #e0e0e0;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+.view-toggle-btn {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #666;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.view-toggle-btn.active {
+    background: white;
+    color: #667eea;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.view-toggle-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Chart View Container */
+.chart-view-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-height: 400px;
+}
+
+.chart-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+/* Chart Type Selector */
+.chart-type-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.chart-type-selector label {
+    font-weight: 500;
+    color: #555;
+    font-size: 0.95rem;
+}
+
+.chart-type-dropdown {
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.chart-type-dropdown:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Enhance Button */
+.enhance-chart-btn {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: white;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.enhance-chart-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.enhance-chart-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Button Spinner */
+.button-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* Chart Display Container */
+.chart-display {
+    width: 100%;
+    height: 500px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 20px;
+}
+
+/* Chart Error and Loading States */
+.chart-error, .chart-loading {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: #999;
+}
+
+.chart-error p {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.chart-loading .spinner {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 15px;
+}
+
+.chart-loading p {
+    font-size: 1rem;
+    color: #667eea;
+}
+
+/* Chart Not Available Message */
+.chart-not-available {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+}
+
+.chart-not-available p {
+    font-size: 1.1rem;
+    color: #999;
+    margin: 5px 0;
+}
+
+.chart-not-available .reason {
+    font-size: 0.95rem;
+    color: #bbb;
+    font-style: italic;
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    padding: 15px 20px;
+    background: #333;
+    color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 0.95rem;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s;
+    z-index: 10000;
+    max-width: 400px;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast.toast-error {
+    background: #dc3545;
+}
+
+.toast.toast-success {
+    background: #28a745;
+}
+
+.toast.toast-info {
+    background: #17a2b8;
+}
+
+/* Responsive Design for Charts */
+@media (max-width: 768px) {
+    .chart-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    .chart-display {
+        height: 400px;
+    }
+}
+
+/* Insights Section Styles */
+.insights-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.insights-header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.insights-header h3 {
+    font-size: 1.2rem;
+    color: #333;
+    margin: 0;
+}
+
+.insights-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.insights-summary {
+    padding: 15px;
+    background: #f0f7ff;
+    border-left: 4px solid #667eea;
+    border-radius: 4px;
+    font-size: 1rem;
+    color: #333;
+    line-height: 1.5;
+}
+
+.insights-findings {
+    padding: 15px;
+    background: #fff9e6;
+    border-left: 4px solid #ffc107;
+    border-radius: 4px;
+}
+
+.insights-findings strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #333;
+    font-size: 1rem;
+}
+
+.insights-findings ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.insights-findings li {
+    margin-bottom: 8px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.insights-suggestions {
+    padding: 15px;
+    background: #e8f5e9;
+    border-left: 4px solid #28a745;
+    border-radius: 4px;
+}
+
+.insights-suggestions strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #333;
+    font-size: 1rem;
+}
+
+.insights-suggestions ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.insights-suggestions li {
+    margin-bottom: 8px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.insights-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: #667eea;
+}
+
+.insights-loading .spinner {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 15px;
+}
+
+.insights-loading p {
+    font-size: 1rem;
+    color: #667eea;
+}
+
+.insights-error {
+    padding: 15px;
+    background: #fee;
+    border-left: 4px solid #c33;
+    border-radius: 4px;
+    color: #c33;
+}
+
+.insights-empty {
+    padding: 30px;
+    text-align: center;
+    color: #999;
+    font-style: italic;
+}
+
+/* Describe Button */
+.describe-button {
+    padding: 8px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+    margin-right: 10px;
+}
+
+.describe-button:hover {
+    background: #5a6268;
+}
+
+/* Describe Section */
+.describe-section {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.describe-section h3 {
+    font-size: 1.2rem;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.stat-column {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.stat-column h4 {
+    font-size: 1rem;
+    color: #667eea;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 5px;
+}
+
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.stats-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9rem;
+}
+
+.stats-table td:first-child {
+    font-weight: 600;
+    color: #555;
+    width: 50%;
+}
+
+.stats-table td:last-child {
+    color: #333;
+    text-align: right;
+}
+
+.stats-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Data Profiling Section */
+.profiling-card {
+    margin-top: 20px;
+}
+
+.profiling-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.profiling-header:hover {
+    background-color: #f8f9fa;
+}
+
+.profiling-header h2 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#profiling-arrow {
+    font-size: 0.8em;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+
+.profiling-content {
+    margin-top: 15px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+/* Profiling Prompt */
+.profiling-prompt {
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.profiling-prompt p {
+    margin-bottom: 15px;
+    color: #555;
+    font-size: 1rem;
+}
+
+.profiling-prompt ul {
+    margin: 15px 0;
+    padding-left: 30px;
+    color: #666;
+}
+
+.profiling-prompt li {
+    margin: 8px 0;
+}
+
+.profile-generate-btn {
+    padding: 12px 24px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 15px;
+}
+
+.profile-generate-btn:hover {
+    background: #5568d3;
+}
+
+/* Profiling Loading */
+.profiling-loading {
+    text-align: center;
+    padding: 40px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.profiling-loading .spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+.profiling-loading p {
+    color: #666;
+    font-size: 1rem;
+}
+
+/* Profiling Error */
+.profiling-error {
+    text-align: center;
+    padding: 30px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+}
+
+.profiling-error p {
+    margin: 10px 0;
+    color: #856404;
+}
+
+.profiling-error .error-detail {
+    font-size: 0.9rem;
+    color: #666;
+    font-style: italic;
+}
+
+.profile-retry-btn {
+    padding: 10px 20px;
+    background: #ffc107;
+    color: #212529;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 15px;
+    font-size: 1rem;
+}
+
+.profile-retry-btn:hover {
+    background: #e0a800;
+}
+
+/* Profiling Report */
+.profiling-report {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    overflow: hidden;
+}
+
+.profiling-actions {
+    padding: 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.profile-download-btn {
+    padding: 8px 16px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.profile-download-btn:hover {
+    background: #218838;
+}
+
+.profile-iframe {
+    width: 100%;
+    height: 800px;
+    border: none;
+    display: block;
+}
+
+/* Chart Type Selector */
+.chart-type-selector-container {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+.chart-type-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.chart-type-label {
+    font-weight: 600;
+    color: #333;
+    font-size: 0.95rem;
+}
+
+.chart-type-select {
+    padding: 8px 32px 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: white;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    min-width: 250px;
+}
+
+.chart-type-select:hover {
+    border-color: #667eea;
+}
+
+.chart-type-select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.chart-type-recommendation {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #856404;
+}
+
+.recommendation-icon {
+    font-size: 1rem;
+}
+
+.recommendation-text {
+    font-weight: 500;
+}
+    
+    .view-toggle-btn {
+        padding: 8px 16px;
+        font-size: 0.9rem;
+    }
+}

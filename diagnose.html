@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chart Diagnostic</title>
+</head>
+<body>
+    <h1>Chart Feature Diagnostic</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        const output = document.getElementById('output');
+        
+        function log(msg, isError = false) {
+            const div = document.createElement('div');
+            div.style.padding = '5px';
+            div.style.margin = '5px 0';
+            div.style.background = isError ? '#fee' : '#efe';
+            div.textContent = msg;
+            output.appendChild(div);
+            console.log(msg);
+        }
+        
+        async function runDiagnostics() {
+            try {
+                log('✓ Script module loaded');
+                
+                // Test 1: Can we import the ChartManager?
+                try {
+                    const { ChartManager } = await import('http://localhost:8501/static/chart-feature/chartManager.js');
+                    log('✓ ChartManager imported successfully');
+                    
+                    // Test 2: Can we create an instance?
+                    try {
+                        const manager = new ChartManager();
+                        log('✓ ChartManager instance created');
+                        
+                        // Test 3: Test with sample data
+                        const testData = {
+                            columns: ['month_name', 'total_sales'],
+                            data: [
+                                ['Jan', 596746.60],
+                                ['Feb', 550816.73],
+                                ['Mar', 644135.24]
+                            ]
+                        };
+                        
+                        log('✓ Test data prepared');
+                        
+                        // Create the containers needed
+                        document.body.innerHTML += `
+                            <div id="chart-toggle-container"></div>
+                            <div id="chart-view-container" style="display:none;">
+                                <div id="chart-controls" class="chart-controls">
+                                    <div id="chart-type-selector-container"></div>
+                                    <div id="enhance-button-container"></div>
+                                </div>
+                                <div id="chart-display-container" style="width:800px;height:500px;border:1px solid #ccc;"></div>
+                            </div>
+                            <div id="results-display" style="display:block;">Table would be here</div>
+                        `;
+                        
+                        log('✓ DOM containers created');
+                        
+                        // Initialize
+                        await manager.initialize(testData);
+                        log('✓ Manager initialized');
+                        
+                        // Try to trigger chart view
+                        log('Attempting to show chart...');
+                        if (manager.chartToggle) {
+                            manager.chartToggle.handleToggle('chart');
+                            log('✓ Chart toggle triggered');
+                        }
+                        
+                    } catch (error) {
+                        log('✗ Error creating/using ChartManager: ' + error.message + '\\n' + error.stack, true);
+                    }
+                    
+                } catch (error) {
+                    log('✗ Error importing ChartManager: ' + error.message, true);
+                }
+                
+            } catch (error) {
+                log('✗ Fatal error: ' + error.message, true);
+            }
+        }
+        
+        runDiagnostics();
+    </script>
+</body>
+</html>

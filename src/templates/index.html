@@ -43,6 +43,11 @@
 
                     <div class="result-card">
                         <h2>📊 Results</h2>
+                        
+                        <!-- Chart Toggle -->
+                        <div id="chart-toggle-container" class="chart-toggle-wrapper"></div>
+                        
+                        <!-- Table View Actions -->
                         <div class="results-actions">
                             <button class="export-button" onclick="exportToExcel()" style="display: none;" id="export-btn">
                                 📄 Export to Excel
@@ -50,8 +55,38 @@
                             <button class="copy-results-button" onclick="copyResults()" style="display: none;" id="copy-results-btn">
                                 📋 Copy to Clipboard
                             </button>
+                            <button class="describe-button" onclick="toggleDescribe()" style="display: none;" id="describe-btn">
+                                📊 Describe
+                            </button>
                         </div>
+                        
+                        <!-- Table View -->
                         <div id="results-display" class="results-display"></div>
+                        
+                        <!-- Describe Statistics Section -->
+                        <div id="describe-section" class="describe-section" style="display: none;"></div>
+                        
+                        <!-- Chart View -->
+                        <div id="chart-view-container" class="chart-view-container" style="display: none;">
+                            <div id="chart-type-selector-container" class="chart-type-selector-container" style="display: none;"></div>
+                            <div id="chart-display-container" class="chart-display"></div>
+                        </div>
+                    </div>
+
+                    <!-- Insights Section -->
+                    <div id="insights-container" class="result-card" style="display: none;"></div>
+
+                    <!-- Data Profiling Section -->
+                    <div id="profiling-section" class="result-card profiling-card" style="display: none;">
+                        <div id="profiling-header" class="profiling-header" onclick="profilingManager.toggle()">
+                            <h2>
+                                <span id="profiling-arrow">▶</span>
+                                📈 Data Profiling Report
+                            </h2>
+                        </div>
+                        <div id="profiling-content" class="profiling-content" style="display: none;">
+                            <!-- Content will be dynamically loaded -->
+                        </div>
                     </div>
 
                     <div class="result-card" id="explanation-card" style="display: none;">
@@ -128,6 +163,8 @@
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}?v=8"></script>
+    <script src="{{ url_for('static', filename='insights/insightsManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='profiling/profilingManager.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='script.js') }}?v=10"></script>
 </body>
 </html>

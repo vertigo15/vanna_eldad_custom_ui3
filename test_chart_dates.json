@@ -1,0 +1,16 @@
+{
+  "columns": [
+    {"name": "year", "type": "numeric"},
+    {"name": "month_id", "type": "numeric"},
+    {"name": "month_name", "type": "category"},
+    {"name": "total_sales", "type": "numeric"}
+  ],
+  "column_names": ["year", "month_id", "month_name", "total_sales"],
+  "sample_data": [
+    [2023, 1, "January", 12500],
+    [2023, 2, "February", 15800],
+    [2023, 3, "March", 14200],
+    [2023, 4, "April", 16900],
+    [2023, 5, "May", 18300]
+  ]
+}

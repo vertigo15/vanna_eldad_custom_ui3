@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Feature Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #test-results {
+            margin-top: 20px;
+        }
+        .test-item {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Chart Feature Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Static Files</h2>
+        <button onclick="testStaticFiles()">Test Static Files</button>
+        <div id="static-files-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Module Loading</h2>
+        <button onclick="testModuleLoading()">Test Module Loading</button>
+        <div id="module-loading-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Data Analyzer</h2>
+        <button onclick="testDataAnalyzer()">Test Data Analyzer</button>
+        <div id="data-analyzer-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 4: Chart Generation</h2>
+        <button onclick="testChartGeneration()">Test Chart Generation</button>
+        <div id="chart-generation-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 5: Full Integration</h2>
+        <button onclick="testFullIntegration()">Run Integration Test</button>
+        <div id="integration-result"></div>
+    </div>
+
+    <script type="module">
+        // Test static files
+        window.testStaticFiles = async function() {
+            const resultDiv = document.getElementById('static-files-result');
+            resultDiv.innerHTML = '<div class="info">Testing static files...</div>';
+            
+            const files = [
+                'http://localhost:8501/static/script.js?v=9',
+                'http://localhost:8501/static/style.css',
+                'http://localhost:8501/static/chart-feature/chartManager.js',
+                'http://localhost:8501/static/chart-feature/utils/dataAnalyzer.js',
+                'http://localhost:8501/static/chart-feature/services/chartConfigGenerator.js'
+            ];
+            
+            let html = '<div class="test-item"><strong>Testing files:</strong></div>';
+            
+            for (const file of files) {
+                try {
+                    const response = await fetch(file, { method: 'HEAD' });
+                    const name = file.split('/').pop();
+                    if (response.ok) {
+                        html += `<div class="test-item">✓ ${name} - OK</div>`;
+                    } else {
+                        html += `<div class="test-item">✗ ${name} - ${response.status}</div>`;
+                    }
+                } catch (error) {
+                    html += `<div class="test-item">✗ ${file} - ${error.message}</div>`;
+                }
+            }
+            
+            resultDiv.innerHTML = html + '<div class="success">Static files test complete!</div>';
+        };
+        
+        // Test module loading
+        window.testModuleLoading = async function() {
+            const resultDiv = document.getElementById('module-loading-result');
+            resultDiv.innerHTML = '<div class="info">Loading modules...</div>';
+            
+            try {
+                const { analyzeData } = await import('http://localhost:8501/static/chart-feature/utils/dataAnalyzer.js');
+                resultDiv.innerHTML = '<div class="success">✓ Modules loaded successfully!</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Module loading failed: ${error.message}</div>`;
+            }
+        };
+        
+        // Test data analyzer
+        window.testDataAnalyzer = async function() {
+            const resultDiv = document.getElementById('data-analyzer-result');
+            resultDiv.innerHTML = '<div class="info">Testing data analyzer...</div>';
+            
+            try {
+                const { analyzeData } = await import('http://localhost:8501/static/chart-feature/utils/dataAnalyzer.js');
+                
+                const testData = {
+                    columns: ['Year', 'Sales'],
+                    data: [
+                        [2020, 100000],
+                        [2021, 150000],
+                        [2022, 180000]
+                    ]
+                };
+                
+                const analysis = analyzeData(testData);
+                
+                let html = '<div class="test-item"><strong>Analysis Results:</strong></div>';
+                html += `<div class="test-item">Can Chart: ${analysis.canChart}</div>`;
+                html += `<div class="test-item">Suggested Type: ${analysis.suggestedChartType}</div>`;
+                html += `<div class="test-item">X-Axis: ${analysis.xAxisColumn?.name || 'N/A'}</div>`;
+                html += `<div class="test-item">Y-Axis: ${analysis.yAxisColumn?.name || 'N/A'}</div>`;
+                html += `<div class="test-item">Reason: ${analysis.reason}</div>`;
+                
+                resultDiv.innerHTML = html + '<div class="success">✓ Data analyzer works!</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Data analyzer failed: ${error.message}<br>${error.stack}</div>`;
+            }
+        };
+        
+        // Test chart generation
+        window.testChartGeneration = async function() {
+            const resultDiv = document.getElementById('chart-generation-result');
+            resultDiv.innerHTML = '<div class="info">Testing chart generation...</div>';
+            
+            try {
+                const { analyzeData } = await import('http://localhost:8501/static/chart-feature/utils/dataAnalyzer.js');
+                const { generateChartConfig } = await import('http://localhost:8501/static/chart-feature/services/chartConfigGenerator.js');
+                
+                const testData = {
+                    columns: ['Year', 'Sales'],
+                    data: [
+                        [2020, 100000],
+                        [2021, 150000],
+                        [2022, 180000]
+                    ]
+                };
+                
+                const analysis = analyzeData(testData);
+                const config = generateChartConfig('bar', testData, analysis);
+                
+                let html = '<div class="test-item"><strong>Generated Config:</strong></div>';
+                html += `<div class="test-item">Type: ${config.type}</div>`;
+                html += `<div class="test-item">Has Title: ${config.options.title ? 'Yes' : 'No'}</div>`;
+                html += `<div class="test-item">Has Series: ${config.options.series?.length > 0 ? 'Yes' : 'No'}</div>`;
+                html += `<div class="test-item">Is Enhanced: ${config.isEnhanced}</div>`;
+                
+                resultDiv.innerHTML = html + '<div class="success">✓ Chart generation works!</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Chart generation failed: ${error.message}<br>${error.stack}</div>`;
+            }
+        };
+        
+        // Test full integration
+        window.testFullIntegration = async function() {
+            const resultDiv = document.getElementById('integration-result');
+            resultDiv.innerHTML = '<div class="info">Running integration test...</div>';
+            
+            try {
+                // Test a real query
+                const response = await fetch('http://localhost:8501/api/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: 'Show me total sales by year' })
+                });
+                
+                const data = await response.json();
+                
+                let html = '<div class="test-item"><strong>API Response:</strong></div>';
+                html += `<div class="test-item">Has SQL: ${data.sql ? 'Yes' : 'No'}</div>`;
+                html += `<div class="test-item">Has Results: ${data.results ? 'Yes' : 'No'}</div>`;
+                
+                if (data.results) {
+                    html += `<div class="test-item">Columns: ${data.results.columns?.length || 0}</div>`;
+                    html += `<div class="test-item">Rows: ${(data.results.data || data.results.rows)?.length || 0}</div>`;
+                    
+                    // Test with the data
+                    const { analyzeData } = await import('http://localhost:8501/static/chart-feature/utils/dataAnalyzer.js');
+                    const analysis = analyzeData(data.results);
+                    
+                    html += `<div class="test-item">Chartable: ${analysis.canChart}</div>`;
+                    html += `<div class="test-item">Suggested Chart: ${analysis.suggestedChartType}</div>`;
+                }
+                
+                resultDiv.innerHTML = html + '<div class="success">✓ Full integration test passed!</div>';
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Integration test failed: ${error.message}<br>${error.stack}</div>`;
+            }
+        };
+    </script>
+</body>
+</html>

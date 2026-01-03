@@ -99,6 +99,205 @@ def get_schema(table_name: str):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/generate-chart', methods=['POST'])
+def generate_chart():
+    """
+    Generate chart configuration using LLM.
+    LLM decides chart type and creates ECharts JSON.
+    
+    Request:
+        columns: List of column info with name and type
+        column_names: List of column names
+        sample_data: Sample data rows (first 10)
+        all_data: All data if dataset is small
+    
+    Returns:
+        chart_config: ECharts configuration JSON
+        chart_type: Type of chart chosen by LLM
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        logger.info(f"Generating chart with LLM for {len(data.get('column_names', []))} columns")
+        
+        # Forward to the main API backend for LLM chart generation
+        response = requests.post(
+            f'{API_BASE_URL}/api/generate-chart',
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            logger.info('Chart generation successful')
+            return jsonify(result)
+        else:
+            logger.error(f"Chart generation API error: {response.status_code}")
+            return jsonify({
+                'error': f'Chart generation service unavailable: {response.status_code}'
+            }), 503
+            
+    except requests.exceptions.Timeout:
+        logger.error('Chart generation request timed out')
+        return jsonify({'error': 'Chart generation request timed out'}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Chart generation request error: {e}")
+        return jsonify({'error': f'Failed to connect to chart generation service: {str(e)}'}), 503
+    except Exception as e:
+        logger.error(f"Unexpected error in chart generation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/generate-insights', methods=['POST'])
+def generate_insights_endpoint():
+    """
+    Generate insights for query results using LLM.
+    
+    Request:
+        dataset: Query results (dict with 'rows' and 'columns')
+        question: Original user question
+    
+    Returns:
+        insights: Dict with 'summary', 'findings', 'suggestions'
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        logger.info(f"Generating insights for question: {data.get('question', 'N/A')[:50]}...")
+        
+        # Forward to the main API backend for LLM insight generation
+        response = requests.post(
+            f'{API_BASE_URL}/api/generate-insights',
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            logger.info('Insights generation successful')
+            return jsonify(result)
+        else:
+            logger.error(f"Insights API error: {response.status_code}")
+            return jsonify({
+                'error': f'Insights service unavailable: {response.status_code}'
+            }), 503
+            
+    except requests.exceptions.Timeout:
+        logger.error('Insights request timed out')
+        return jsonify({'error': 'Insights request timed out'}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Insights request error: {e}")
+        return jsonify({'error': f'Failed to connect to insights service: {str(e)}'}), 503
+    except Exception as e:
+        logger.error(f"Unexpected error in insights generation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/generate-profile', methods=['POST'])
+def generate_profile_endpoint():
+    """
+    Generate data profiling report using ydata-profiling.
+    
+    Request:
+        dataset: Query results (dict with 'rows' and 'columns')
+    
+    Returns:
+        html: HTML string containing the full profile report
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        logger.info('Generating data profile report...')
+        
+        # Forward to the main API backend for profiling
+        response = requests.post(
+            f'{API_BASE_URL}/api/generate-profile',
+            json=data,
+            timeout=120  # Profiling can take longer for large datasets
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            logger.info('Profile report generated successfully')
+            return jsonify(result)
+        else:
+            logger.error(f"Profile API error: {response.status_code}")
+            return jsonify({
+                'error': f'Profile service unavailable: {response.status_code}'
+            }), 503
+            
+    except requests.exceptions.Timeout:
+        logger.error('Profile request timed out')
+        return jsonify({'error': 'Profile generation timed out. Try with a smaller dataset.'}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Profile request error: {e}")
+        return jsonify({'error': f'Failed to connect to profile service: {str(e)}'}), 503
+    except Exception as e:
+        logger.error(f"Unexpected error in profile generation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/enhance-chart', methods=['POST'])
+def enhance_chart():
+    """
+    Enhance chart configuration using LLM.
+    
+    Request:
+        columns: List of column info with name and type
+        sample_data: Sample data rows (first 10)
+        chart_type: Type of chart (line/bar/pie)
+        current_config: Current basic chart config
+    
+    Returns:
+        enhanced_config: Enhanced ECharts configuration
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        logger.info(f"Enhancing chart: type={data.get('chart_type')}")
+        
+        # Forward to the main API backend for LLM enhancement
+        # Note: This endpoint needs to be implemented in the main Vanna API
+        response = requests.post(
+            f'{API_BASE_URL}/api/enhance-chart',
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            logger.info('Chart enhancement successful')
+            return jsonify(result)
+        else:
+            logger.error(f"Chart enhancement API error: {response.status_code}")
+            # Fallback: return error so frontend uses Tier 1 config
+            return jsonify({
+                'error': f'Enhancement service unavailable: {response.status_code}'
+            }), 503
+            
+    except requests.exceptions.Timeout:
+        logger.error('Chart enhancement request timed out')
+        return jsonify({'error': 'Enhancement request timed out'}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Chart enhancement request error: {e}")
+        return jsonify({'error': f'Failed to connect to enhancement service: {str(e)}'}), 503
+    except Exception as e:
+        logger.error(f"Unexpected error in chart enhancement: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health')
 def health():
     """Health check endpoint."""
