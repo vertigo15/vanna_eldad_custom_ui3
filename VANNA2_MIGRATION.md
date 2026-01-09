@@ -148,22 +148,64 @@ curl http://localhost:8000/api/conversations?user_id=default
 curl http://localhost:8000/api/conversations/550e8400-e29b-41d4-a716-446655440000?user_id=default
 ```
 
-## Running the New Version
+### Using Vanna 2.0 Agent (Full Version)
 
-### Option 1: Run the new main file directly
+With `main_vanna2_full.py`, use Vanna's streaming endpoints:
 
+```bash
+# Streaming chat (Server-Sent Events)
+curl -N -X POST http://localhost:8000/api/vanna/v2/chat_sse \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Show me total sales",
+    "conversation_id": "optional-uuid",
+    "metadata": {}
+  }'
+```
+
+**Available Vanna Endpoints:**
+- `POST /api/vanna/v2/chat_sse` - Streaming chat (SSE)
+- `POST /api/vanna/v2/chat_poll` - Polling-based chat
+- `GET /` - Web UI with `<vanna-chat>` component
+- `GET /health` - Health check
+- `GET /api/tables` - List tables
+- `GET /api/schema/{table}` - Get table schema
+
+## Running the Migrated Versions
+
+### Three Options Available:
+
+#### Option 1: Original (No Conversation History)
+```bash
+python -m uvicorn src.main:app --reload --port 8000
+```
+Uses custom orchestration, no conversation tracking.
+
+#### Option 2: Conversation History (Custom Orchestration)
 ```bash
 python -m uvicorn src.main_vanna2:app --reload --port 8000
 ```
+Adds conversation history, but uses custom orchestration.
 
-### Option 2: Update docker-compose.yml
+#### Option 3: Full Vanna 2.0 Agent ⭐ **RECOMMENDED**
+```bash
+python -m uvicorn src.main_vanna2_full:app --reload --port 8000
+```
+Full Vanna 2.0 integration with:
+- `vanna.Agent` orchestration
+- Streaming responses (SSE)
+- Built-in chat routes: `/api/vanna/v2/chat_sse`
+- Tool registry with permissions
+- `<vanna-chat>` web component support
 
-Change the command to use `main_vanna2`:
+### Docker Deployment
+
+Update `docker-compose.yml` to use the full agent:
 
 ```yaml
 services:
   vanna-app:
-    command: uvicorn src.main_vanna2:app --host 0.0.0.0 --port 8000
+    command: uvicorn src.main_vanna2_full:app --host 0.0.0.0 --port 8000
 ```
 
 ## Backward Compatibility
@@ -187,17 +229,17 @@ This implementation uses **Vanna 2.0 patterns** but doesn't fully migrate to Van
 | Streaming Responses | ❌ Not implemented | ✅ Server-Sent Events |
 | Web UI Component | ❌ Custom UI | ✅ `<vanna-chat>` component |
 
-## Next Steps (If Needed)
+## Full Migration Complete! ✅
 
-To fully migrate to Vanna 2.0 Agent:
+All components have been migrated to Vanna 2.0:
 
-1. ✅ **DONE:** Conversation store
-2. ✅ **DONE:** User resolver compatible interface
-3. 🔲 **TODO:** Inherit LLM Service from `vanna.core.llm.LlmService`
-4. 🔲 **TODO:** Use Vanna's `ToolRegistry` for tool management
-5. 🔲 **TODO:** Replace custom orchestration with `vanna.Agent`
-6. 🔲 **TODO:** Add streaming support via SSE
-7. 🔲 **TODO:** Integrate `<vanna-chat>` web component
+1. ✅ **DONE:** Conversation store - PostgreSQL-based
+2. ✅ **DONE:** User resolver - Compatible with Vanna 2.0 interface
+3. ✅ **DONE:** LLM Service - Inherits from `vanna.core.llm.LlmService`
+4. ✅ **DONE:** Tool Registry - Using Vanna's `ToolRegistry`
+5. ✅ **DONE:** Full Vanna Agent - Using `vanna.Agent` class
+6. ✅ **DONE:** Streaming support - Via Server-Sent Events
+7. ✅ **DONE:** Web UI routes - Integrated `<vanna-chat>` endpoints
 
 ## Testing
 
@@ -243,11 +285,14 @@ curl http://localhost:8000/api/conversations/<conversation-id>?user_id=default
 ### New Files
 - `src/conversation/postgres_conversation_store.py` - Conversation storage
 - `src/conversation/__init__.py` - Module exports
-- `src/main_vanna2.py` - New main application with conversation support
+- `src/main_vanna2.py` - Conversation-aware application (custom orchestration)
+- `src/main_vanna2_full.py` - **Full Vanna 2.0 Agent integration** ⭐
+- `src/tools/vanna_sql_tool.py` - Vanna 2.0 compatible SQL tool
 - `VANNA2_MIGRATION.md` - This file
 
 ### Modified Files
-- `src/agent/user_resolver.py` - Made compatible with Vanna 2.0 interface
+- `src/agent/user_resolver.py` - Compatible with Vanna 2.0 interface
+- `src/agent/llm_service.py` - Inherits from Vanna's LlmService
 
 ### Unchanged (Still Works)
 - `src/main.py` - Original application (still functional)
