@@ -1,0 +1,270 @@
+# Vanna 2.0 Agent Migration
+
+This branch (`vanna2-agent-migration`) contains the migration to add **conversation history** support using Vanna 2.0 patterns.
+
+## What's New
+
+### ✨ Conversation History
+- **Track conversations** across multiple queries using `conversation_id`
+- **Context-aware responses** - The agent remembers previous questions and answers
+- **Conversation management** - List, retrieve, and delete conversations per user
+
+### 🗄️ New Components
+
+#### 1. ConversationStore (`src/conversation/`)
+- **PostgresConversationStore** - Stores conversation history in PostgreSQL
+- Automatically creates conversations and messages tables
+- User-scoped conversations for privacy
+- Methods:
+  - `save_message()` - Save user/assistant messages
+  - `get_conversation()` - Retrieve full conversation
+  - `list_conversations()` - List user's conversations
+  - `get_recent_messages()` - Get last N messages for context
+
+#### 2. Updated User Resolver (`src/agent/user_resolver.py`)
+- Now compatible with Vanna 2.0's `UserResolver` interface
+- Supports `RequestContext` with headers and metadata
+- Fallback implementation if Vanna 2.0 not fully installed
+- Adds `group_memberships` for future permission support
+
+#### 3. New Main Application (`src/main_vanna2.py`)
+- **Conversation-aware** `/api/query` endpoint
+- Includes conversation history in LLM context (last 5 messages)
+- Returns `conversation_id` in responses
+- New endpoints:
+  - `GET /api/conversations` - List conversations
+  - `GET /api/conversations/{conversation_id}` - Get conversation details
+
+## How It Works
+
+### Conversation Flow
+
+```
+1. User asks: "Show me sales by month" (no conversation_id)
+   → System generates new conversation_id
+   → Saves user message
+   → Generates SQL
+   → Saves assistant response
+   → Returns results + conversation_id
+
+2. User asks: "Now filter for 2023" (with conversation_id from step 1)
+   → System retrieves last 5 messages from conversation
+   → Includes conversation history in LLM prompt
+   → LLM understands "that" refers to previous query
+   → Generates contextual SQL
+   → Saves messages to same conversation
+```
+
+### Database Schema
+
+Two new tables are created in `pgvector` database:
+
+**conversations**
+```sql
+- id (VARCHAR PRIMARY KEY)
+- user_id (VARCHAR)
+- created_at (TIMESTAMP)
+- updated_at (TIMESTAMP)
+- metadata (JSONB)
+```
+
+**conversation_messages**
+```sql
+- id (SERIAL PRIMARY KEY)
+- conversation_id (VARCHAR, FK)
+- role (VARCHAR: 'user' or 'assistant')
+- content (TEXT)
+- timestamp (TIMESTAMP)
+- metadata (JSONB)
+```
+
+## API Changes
+
+### Request Format (Updated)
+
+```json
+{
+  "question": "Show me total sales",
+  "conversation_id": "optional-uuid-here",
+  "user_context": {}
+}
+```
+
+### Response Format (Updated)
+
+```json
+{
+  "question": "Show me total sales",
+  "sql": "SELECT SUM(amount)...",
+  "results": {...},
+  "explanation": "Query executed successfully",
+  "conversation_id": "abc-123-def",  // NEW
+  "error": null
+}
+```
+
+## Usage Examples
+
+### Start a New Conversation
+
+```bash
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Show me sales by month for 2023"
+  }'
+```
+
+Response includes `conversation_id`:
+```json
+{
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+  ...
+}
+```
+
+### Continue the Conversation
+
+```bash
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Now show only Q1",
+    "conversation_id": "550e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+The agent will understand "Now show only Q1" refers to the previous query.
+
+### List Conversations
+
+```bash
+curl http://localhost:8000/api/conversations?user_id=default
+```
+
+### Get Conversation History
+
+```bash
+curl http://localhost:8000/api/conversations/550e8400-e29b-41d4-a716-446655440000?user_id=default
+```
+
+## Running the New Version
+
+### Option 1: Run the new main file directly
+
+```bash
+python -m uvicorn src.main_vanna2:app --reload --port 8000
+```
+
+### Option 2: Update docker-compose.yml
+
+Change the command to use `main_vanna2`:
+
+```yaml
+services:
+  vanna-app:
+    command: uvicorn src.main_vanna2:app --host 0.0.0.0 --port 8000
+```
+
+## Backward Compatibility
+
+- ✅ **All existing endpoints still work** (`/api/query`, `/api/tables`, `/health`)
+- ✅ **Existing clients** work without changes (conversation_id is optional)
+- ✅ **If conversation_id not provided**, each query is independent (like before)
+- ✅ **All existing functionality preserved** (RAG, tool memory, embeddings)
+
+## What's Different from Full Vanna 2.0?
+
+This implementation uses **Vanna 2.0 patterns** but doesn't fully migrate to Vanna's `Agent` class:
+
+| Feature | This Branch | Full Vanna 2.0 Agent |
+|---------|-------------|---------------------|
+| Conversation History | ✅ Custom PostgreSQL | ✅ Built-in ConversationStore |
+| User Resolver | ✅ Compatible interface | ✅ Native integration |
+| LLM Service | ❌ Custom (not inherited) | ✅ Inherits from LlmService |
+| Tool Registry | ❌ Custom tool wrapper | ✅ ToolRegistry with access control |
+| Agent Orchestration | ❌ Custom | ✅ Vanna's Agent class |
+| Streaming Responses | ❌ Not implemented | ✅ Server-Sent Events |
+| Web UI Component | ❌ Custom UI | ✅ `<vanna-chat>` component |
+
+## Next Steps (If Needed)
+
+To fully migrate to Vanna 2.0 Agent:
+
+1. ✅ **DONE:** Conversation store
+2. ✅ **DONE:** User resolver compatible interface
+3. 🔲 **TODO:** Inherit LLM Service from `vanna.core.llm.LlmService`
+4. 🔲 **TODO:** Use Vanna's `ToolRegistry` for tool management
+5. 🔲 **TODO:** Replace custom orchestration with `vanna.Agent`
+6. 🔲 **TODO:** Add streaming support via SSE
+7. 🔲 **TODO:** Integrate `<vanna-chat>` web component
+
+## Testing
+
+### 1. Test Conversation Creation
+
+```bash
+# First question
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is the total revenue?"}'
+# Note the conversation_id in response
+```
+
+### 2. Test Conversation Context
+
+```bash
+# Follow-up question (use conversation_id from above)
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Show me the breakdown by month",
+    "conversation_id": "<conversation-id-from-step-1>"
+  }'
+```
+
+### 3. Test Conversation Retrieval
+
+```bash
+curl http://localhost:8000/api/conversations/<conversation-id>?user_id=default
+```
+
+## Benefits
+
+✅ **Contextual conversations** - "Show me that data for last year" works  
+✅ **User history** - Track all conversations per user  
+✅ **Better UX** - Users can have natural multi-turn dialogues  
+✅ **Backward compatible** - Existing code still works  
+✅ **Database-backed** - Conversations persist across restarts  
+✅ **Privacy-aware** - User-scoped conversations  
+
+## Files Changed
+
+### New Files
+- `src/conversation/postgres_conversation_store.py` - Conversation storage
+- `src/conversation/__init__.py` - Module exports
+- `src/main_vanna2.py` - New main application with conversation support
+- `VANNA2_MIGRATION.md` - This file
+
+### Modified Files
+- `src/agent/user_resolver.py` - Made compatible with Vanna 2.0 interface
+
+### Unchanged (Still Works)
+- `src/main.py` - Original application (still functional)
+- `src/agent/vanna_agent.py` - Original agent
+- `src/memory/pgvector_memory.py` - Agent memory
+- All other existing files
+
+## Merge Strategy
+
+When ready to merge to `main`:
+
+1. Test thoroughly on this branch
+2. Update `docker-compose.yml` to use `main_vanna2.py`
+3. Add database migration for conversation tables
+4. Update documentation
+5. Merge to main
+
+Or keep both versions:
+- `src/main.py` - Without conversation history (simpler)
+- `src/main_vanna2.py` - With conversation history (advanced)

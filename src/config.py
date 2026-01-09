@@ -17,12 +17,23 @@ class Settings(BaseSettings):
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = "text-embedding-3-large-2"
     AZURE_OPENAI_EMBEDDINGS_API_VERSION: str = "2023-05-15"
     
+    # Database Type Selection
+    DATABASE_TYPE: str = "postgresql"  # Options: postgresql, sqlserver
+    
     # Data Source - AdventureWorksDW (PostgreSQL)
     DATA_SOURCE_HOST: str
     DATA_SOURCE_PORT: int = 5432
     DATA_SOURCE_DB: str
     DATA_SOURCE_USER: str
     DATA_SOURCE_PASSWORD: str
+    
+    # SQL Server Configuration (Alternative)
+    SQLSERVER_HOST: str = ""
+    SQLSERVER_PORT: int = 1433
+    SQLSERVER_DB: str = ""
+    SQLSERVER_USER: str = ""
+    SQLSERVER_PASSWORD: str = ""
+    SQLSERVER_DRIVER: str = "ODBC Driver 18 for SQL Server"
     
     # pgvector (Local Vector Store)
     PGVECTOR_HOST: str = "pgvector-db"

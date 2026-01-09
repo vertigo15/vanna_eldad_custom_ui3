@@ -392,7 +392,131 @@ Use ECharts template strings instead of functions:
 - `"{value} kg"` → "100 kg"
 - `"{value}%"` → "50%"
 
-## 4. Layout and Spacing Requirements
+## 4. Number Formatting
+
+Apply smart formatting to all numbers in axis labels, tooltips, and data labels for readability.
+
+### Large Numbers — Use K/M/B Abbreviations:
+
+| Value Range | Format | Examples |
+|-------------|--------|----------|
+| < 1,000 | Whole number | 45, 850, 999 |
+| 1,000 - 999,999 | K suffix | 1.2K, 45K, 850K |
+| 1,000,000 - 999,999,999 | M suffix | 1.2M, 45M, 850M |
+| ≥ 1,000,000,000 | B suffix | 1.2B, 45B |
+
+### Rounding Rules:
+- Show maximum 2 decimal places: **1.23M** (not 1.235455M)
+- Drop decimal if .0: **2M** (not 2.0M)
+- For values < 1000: Show whole numbers or 1 decimal if needed
+
+### Auto-Detect Data Type from Column Name:
+
+**CURRENCY** (add $ prefix):
+Column name contains: `price`, `amount`, `revenue`, `sales`, `cost`, `profit`, `total`, `budget`, `spend`, `payment`, `balance`
+→ Format: **$1.2M**, **$850K**, **$45**
+
+**PERCENTAGE** (add % suffix):
+Column name contains: `percent`, `pct`, `rate`, `ratio`, `share`, `growth`, `margin`, `change`
+→ Format: **45.5%**, **12%**, **0.5%**
+
+**COUNTS/UNITS** (no prefix/suffix):
+Column name contains: `count`, `quantity`, `units`, `orders`, `users`, `customers`, `items`, `transactions`
+→ Format: **1.2K**, **850**, **45M**
+
+### Apply Formatting To:
+1. **Y-axis labels** - Use axisLabel formatter
+2. **Tooltip values** - Format in tooltip formatter
+3. **Data labels** (if shown) - Format in label formatter
+
+### Formatting Examples by Column Type:
+
+**Column: "total_sales_amount" with value 1,500,000:**
+```json
+"yAxis": { 
+  "type": "value",
+  "axisLabel": { "formatter": "${value >= 1000000 ? (value/1000000).toFixed(1) + 'M' : value >= 1000 ? (value/1000).toFixed(1) + 'K' : value}" }
+}
+```
+→ Y-axis shows: **$1.5M**
+→ Tooltip: "Total Sales: **$1.5M**"
+→ Data label: **$1.5M**
+
+**Column: "growth_rate" with value 45.5:**
+→ Display as: **45.5%**
+
+**Column: "number_of_orders" with value 12,500:**
+→ Display as: **12.5K**
+
+**Column: "customer_count" with value 850:**
+→ Display as: **850** (no formatting needed)
+
+### HOW TO IMPLEMENT - Step by Step:
+
+**Step 1: Analyze the Data Range**
+- Look at the max value in your dataset
+- If max value ≥ 1,000,000 → Use millions (M)
+- If max value ≥ 1,000 but < 1,000,000 → Use thousands (K)
+- If max value < 1,000 → No formatting needed
+
+**Step 2: Transform the Data**
+- **For M format**: Divide ALL data values by 1,000,000
+- **For K format**: Divide ALL data values by 1,000
+- Round to 1-2 decimal places
+
+**Step 3: Apply String Formatters**
+- Add the appropriate suffix in formatter: `"{value}M"`, `"{value}K"`, or `"${value}M"` for currency
+
+**CRITICAL**: You MUST transform the actual data values, not just the formatter!
+
+### Complete Formatting Example:
+
+**EXAMPLE 1: Sales in Millions**
+
+Original data: [1500000, 850000, 2000000]
+Max value: 2,000,000 → Use millions (M)
+
+**Before (WRONG - raw values):**
+```json
+"yAxis": { "type": "value" },
+"series": [{ "data": [1500000, 850000, 2000000] }]
+```
+❌ Chart shows: 1500000, 850000, 2000000
+
+**After (CORRECT - transformed values):**
+```json
+"yAxis": { 
+  "type": "value",
+  "axisLabel": { "formatter": "${value}M" }
+},
+"series": [{ 
+  "data": [1.5, 0.85, 2.0],
+  "label": { "show": true, "formatter": "${value}M" }
+}],
+"tooltip": { "formatter": "{b}<br/>{a}: ${c}M" }
+```
+✅ Chart shows: $1.5M, $0.85M, $2M
+
+**EXAMPLE 2: Sales in Hundreds of Thousands**
+
+Original data: [676763, 520818, 678560]
+Max value: 678,560 → Use thousands (K)
+
+**CORRECT Implementation:**
+```json
+"yAxis": { 
+  "type": "value",
+  "axisLabel": { "formatter": "${value}K" }
+},
+"series": [{ 
+  "data": [676.8, 520.8, 678.6],
+  "label": { "show": true, "formatter": "${value}K" }
+}],
+"tooltip": { "formatter": "{b}<br/>{a}: ${c}K" }
+```
+✅ Chart shows: $677K, $521K, $679K
+
+## 5. Layout and Spacing Requirements
 
 **CRITICAL - Prevent Overlapping Elements:**
 - Title and legend must NEVER overlap
@@ -406,7 +530,7 @@ Use ECharts template strings instead of functions:
 2. **Title left + Legend right**: `{title: {left: "left"}, legend: {right: 10, top: "middle"}}`
 3. **Title top-left + Legend bottom**: `{title: {left: "left", top: 10}, legend: {bottom: 10}}`
 
-## 5. Return Requirements
+## 6. Return Requirements
 
 - Return ONLY valid JSON (no explanatory text before or after)
 - Do NOT wrap JSON in markdown code blocks (no ```json)
@@ -414,7 +538,7 @@ Use ECharts template strings instead of functions:
 - Ensure all property names are double-quoted
 - Use arrays for data, not objects with numeric keys
 
-## 6. ECharts Examples
+## 7. ECharts Examples
 
 ### Line Chart (Time Series with Consolidated Dates)
 {
@@ -572,7 +696,7 @@ Use ECharts template strings instead of functions:
   ]
 }
 
-## 7. Edge Case Handling
+## 8. Edge Case Handling
 
 - **>10 categories for pie**: Aggregate smallest values into "Other"
 - **Empty dataset**: Return error message in JSON: {"error": "No data provided"}
@@ -582,7 +706,8 @@ Use ECharts template strings instead of functions:
 - **Multiple date columns**: Consolidate into single YYYY/MM format (see Section 1)
 - **Unsorted date data**: Always sort chronologically before generating chart
 - **Mixed date formats**: Normalize all dates to consistent YYYY/MM or YYYY/MM/DD format
-- **Title/Legend overlap**: ALWAYS follow Section 4 layout guidelines"""
+- **Title/Legend overlap**: ALWAYS follow Section 5 layout guidelines
+- **Large numbers**: ALWAYS apply Section 4 number formatting rules"""
         
         # User prompt: Provide the data
         chart_type_instruction = ""

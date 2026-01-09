@@ -261,7 +261,10 @@ export class ChartManager {
         this.state.currentConfig = chartConfig;
         
         try {
-            await this.chartContainer.init();
+            // Only initialize if not already initialized
+            if (!this.chartContainer.chartInstance) {
+                await this.chartContainer.init();
+            }
             this.chartContainer.render(chartConfig);
             console.log('[ChartManager] Chart rendered successfully');
         } catch (error) {

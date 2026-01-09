@@ -97,6 +97,9 @@ export class ChartTypeSelector {
         
         this.currentType = chartType;
         
+        // Update recommendation display
+        this.updateRecommendationDisplay();
+        
         if (this.onChange) {
             this.onChange(chartType);
         }
