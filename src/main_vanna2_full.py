@@ -213,6 +213,72 @@ async def get_table_schema(table_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Custom endpoint for existing UI compatibility
+from pydantic import BaseModel
+
+class QueryRequest(BaseModel):
+    """Request model for custom UI."""
+    question: str
+    conversation_id: Optional[str] = None
+
+
+@app.post("/api/query")
+async def query_for_ui(request: QueryRequest):
+    """
+    Custom endpoint for existing UI compatibility.
+    Calls Vanna Agent and returns results in expected format.
+    """
+    if not agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    try:
+        from vanna.core.user import RequestContext
+        
+        # Create request context
+        context = RequestContext(metadata={"source": "custom_ui"})
+        
+        # Send message to agent (this will handle conversation internally)
+        conversation_id = request.conversation_id or ""
+        
+        # Collect all responses from streaming
+        responses = []
+        async for response in agent.send_message(
+            context,
+            request.question,
+            conversation_id=conversation_id
+        ):
+            responses.append(response)
+        
+        # Extract SQL and results from responses
+        sql = None
+        results = None
+        explanation = ""
+        
+        for resp in responses:
+            # Look for SQL in tool results
+            if hasattr(resp, 'tool_result'):
+                tool_result = resp.tool_result
+                if hasattr(tool_result, 'data'):
+                    results = tool_result.data
+            
+            # Collect explanation text
+            if hasattr(resp, 'content'):
+                explanation += resp.content
+        
+        return {
+            "question": request.question,
+            "sql": sql,
+            "results": results,
+            "explanation": explanation,
+            "conversation_id": conversation_id,
+            "error": None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in UI query endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Register Vanna's chat routes
 if agent:
     chat_handler = ChatHandler(agent)
