@@ -239,7 +239,11 @@ function renderTable(results, rows) {
 
 // Sort table by column
 function sortTable(columnIndex) {
-    if (!currentResults) return;
+    console.log('[Sort] Sorting column:', columnIndex);
+    if (!currentResults) {
+        console.warn('[Sort] No current results');
+        return;
+    }
     
     // Clone the data array to avoid modifying original
     let rows = [...(currentResults.data || currentResults.rows)];
@@ -322,7 +326,11 @@ function sortTable(columnIndex) {
 
 // Filter results
 function filterResults() {
-    if (!currentResults) return;
+    console.log('[Filter] Filter triggered');
+    if (!currentResults) {
+        console.warn('[Filter] No current results');
+        return;
+    }
     
     filterText = document.getElementById('result-filter').value.toLowerCase();
     // Clone the data array
@@ -846,3 +854,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load history on page load
     displayHistory();
 });
+
+// Expose functions to global scope for inline onclick/onkeyup handlers
+// (Required because script is loaded as a module)
+window.askQuestion = askQuestion;
+window.fillQuestion = fillQuestion;
+window.copySql = copySql;
+window.copyResults = copyResults;
+window.toggleSql = toggleSql;
+window.togglePrompt = togglePrompt;
+window.toggleDescribe = toggleDescribe;
+window.exportResults = exportResults;
+window.loadTables = loadTables;
+window.filterTables = filterTables;
+window.viewSchema = viewSchema;
+window.saveToHistory = saveToHistory;
+window.clearHistory = clearHistory;
+window.sortTable = sortTable;
+window.filterResults = filterResults;
