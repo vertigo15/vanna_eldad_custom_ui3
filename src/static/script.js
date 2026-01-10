@@ -241,7 +241,8 @@ function renderTable(results, rows) {
 function sortTable(columnIndex) {
     if (!currentResults) return;
     
-    let rows = currentResults.data || currentResults.rows;
+    // Clone the data array to avoid modifying original
+    let rows = [...(currentResults.data || currentResults.rows)];
     const column = currentResults.columns[columnIndex];
     
     // Toggle sort direction if clicking same column
@@ -287,8 +288,36 @@ function sortTable(columnIndex) {
         }
     });
     
+    // Apply current filter if exists
+    const filterInput = document.getElementById('result-filter');
+    const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
+    
+    if (filterValue) {
+        rows = rows.filter(row => {
+            if (Array.isArray(row)) {
+                return row.some(cell => 
+                    cell !== null && cell !== undefined && 
+                    String(cell).toLowerCase().includes(filterValue)
+                );
+            } else {
+                return currentResults.columns.some(col => {
+                    const cell = row[col];
+                    return cell !== null && cell !== undefined && 
+                        String(cell).toLowerCase().includes(filterValue);
+                });
+            }
+        });
+    }
+    
     // Update display
     document.getElementById('table-container').innerHTML = renderTable(currentResults, rows);
+    
+    // Update row count
+    const allRows = currentResults.data || currentResults.rows;
+    if (filterValue) {
+        document.getElementById('row-count').textContent = 
+            `${rows.length} of ${allRows.length} row${allRows.length !== 1 ? 's' : ''}`;
+    }
 }
 
 // Filter results
@@ -296,11 +325,52 @@ function filterResults() {
     if (!currentResults) return;
     
     filterText = document.getElementById('result-filter').value.toLowerCase();
-    let rows = currentResults.data || currentResults.rows;
+    // Clone the data array
+    let rows = [...(currentResults.data || currentResults.rows)];
+    
+    // Apply current sort if exists
+    if (sortColumn !== null) {
+        const column = currentResults.columns[sortColumn];
+        rows.sort((a, b) => {
+            let valA, valB;
+            
+            if (Array.isArray(a)) {
+                valA = a[sortColumn];
+                valB = b[sortColumn];
+            } else {
+                valA = a[column];
+                valB = b[column];
+            }
+            
+            // Handle nulls
+            if (valA === null || valA === undefined) return 1;
+            if (valB === null || valB === undefined) return -1;
+            
+            // Try numeric comparison first
+            const numA = parseFloat(String(valA).replace(/[^0-9.-]/g, ''));
+            const numB = parseFloat(String(valB).replace(/[^0-9.-]/g, ''));
+            
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return sortDirection === 'asc' ? numA - numB : numB - numA;
+            }
+            
+            // String comparison
+            const strA = String(valA).toLowerCase();
+            const strB = String(valB).toLowerCase();
+            
+            if (sortDirection === 'asc') {
+                return strA < strB ? -1 : strA > strB ? 1 : 0;
+            } else {
+                return strA > strB ? -1 : strA < strB ? 1 : 0;
+            }
+        });
+    }
     
     if (!filterText) {
-        // No filter, show all
+        // No filter, show all (with current sort)
         document.getElementById('table-container').innerHTML = renderTable(currentResults, rows);
+        document.getElementById('row-count').textContent = 
+            `${rows.length} row${rows.length !== 1 ? 's' : ''} returned`;
         return;
     }
     
@@ -325,8 +395,9 @@ function filterResults() {
     document.getElementById('table-container').innerHTML = renderTable(currentResults, filtered);
     
     // Update count
+    const allRows = currentResults.data || currentResults.rows;
     document.getElementById('row-count').textContent = 
-        `${filtered.length} of ${rows.length} row${rows.length !== 1 ? 's' : ''}`;
+        `${filtered.length} of ${allRows.length} row${allRows.length !== 1 ? 's' : ''}`;
 }
 
 // Copy SQL to clipboard
