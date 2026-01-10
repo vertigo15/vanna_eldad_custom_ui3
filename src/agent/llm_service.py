@@ -5,27 +5,8 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 import asyncio
 import json
 
-try:
-    from vanna.core.llm.base import LlmService
-    from vanna.core.llm.models import LlmRequest, LlmResponse, Message, ToolCall
-    VANNA2_AVAILABLE = True
-except ImportError:
-    VANNA2_AVAILABLE = False
-    # Fallback base class
-    class LlmService:
-        pass
-    
-    class LlmRequest:
-        pass
-    
-    class LlmResponse:
-        pass
-    
-    class Message:
-        pass
-    
-    class ToolCall:
-        pass
+from vanna.core.llm.base import LlmService
+from vanna.core.llm.models import LlmRequest, LlmResponse, Message, ToolCall
 
 
 class AzureOpenAILlmService(LlmService):
@@ -158,9 +139,6 @@ class AzureOpenAILlmService(LlmService):
         Returns:
             LlmResponse object
         """
-        if not VANNA2_AVAILABLE:
-            raise NotImplementedError("Vanna 2.0 not available")
-        
         # Convert Vanna's Message objects to dicts for OpenAI
         messages = [
             {"role": msg.role, "content": msg.content}
@@ -217,9 +195,6 @@ class AzureOpenAILlmService(LlmService):
         Yields:
             LlmResponse chunks
         """
-        if not VANNA2_AVAILABLE:
-            raise NotImplementedError("Vanna 2.0 not available")
-        
         # Convert messages
         messages = [
             {"role": msg.role, "content": msg.content}

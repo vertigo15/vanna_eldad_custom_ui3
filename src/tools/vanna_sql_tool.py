@@ -4,23 +4,7 @@ from typing import Dict, Any, List
 import json
 from pydantic import BaseModel, Field
 
-try:
-    from vanna.core.tool import Tool, ToolContext, ToolResult
-    from vanna.core.schema import ToolSchema, ToolParameter
-    VANNA2_AVAILABLE = True
-except ImportError:
-    VANNA2_AVAILABLE = False
-    # Fallback
-    class Tool:
-        pass
-    class ToolContext:
-        pass
-    class ToolResult:
-        pass
-    class ToolSchema:
-        pass
-    class ToolParameter:
-        pass
+from vanna.core.tool import Tool, ToolContext, ToolResult
 
 from src.tools.sql_tool import PostgresSqlRunner
 
@@ -77,54 +61,30 @@ class VannaRunSqlTool(Tool):
             
             if "error" in result:
                 # Return error result
-                if VANNA2_AVAILABLE:
-                    return ToolResult(
-                        success=False,
-                        error=result["error"],
-                        data=result
-                    )
-                else:
-                    return {
-                        "success": False,
-                        "error": result["error"],
-                        "data": result
-                    }
+                return ToolResult(
+                    success=False,
+                    error=result["error"],
+                    data=result
+                )
             
             # Return success result
-            if VANNA2_AVAILABLE:
-                return ToolResult(
-                    success=True,
-                    data=result,
-                    metadata={
-                        "row_count": result.get("row_count", 0),
-                        "column_count": len(result.get("columns", []))
-                    }
-                )
-            else:
-                return {
-                    "success": True,
-                    "data": result,
-                    "metadata": {
-                        "row_count": result.get("row_count", 0),
-                        "column_count": len(result.get("columns", []))
-                    }
+            return ToolResult(
+                success=True,
+                data=result,
+                metadata={
+                    "row_count": result.get("row_count", 0),
+                    "column_count": len(result.get("columns", []))
                 }
+            )
         
         except Exception as e:
             # Handle unexpected errors
             error_msg = str(e)
-            if VANNA2_AVAILABLE:
-                return ToolResult(
-                    success=False,
-                    error=error_msg,
-                    data={"error": error_msg, "columns": [], "rows": [], "row_count": 0}
-                )
-            else:
-                return {
-                    "success": False,
-                    "error": error_msg,
-                    "data": {"error": error_msg, "columns": [], "rows": [], "row_count": 0}
-                }
+            return ToolResult(
+                success=False,
+                error=error_msg,
+                data={"error": error_msg, "columns": [], "rows": [], "row_count": 0}
+            )
     
     def validate_permissions(self, context: ToolContext) -> bool:
         """
