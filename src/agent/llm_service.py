@@ -205,11 +205,15 @@ class AzureOpenAILlmService(LlmService):
         # Add tools if provided
         if hasattr(request, 'tools') and request.tools:
             # Transform Vanna ToolSchema to Azure OpenAI format
+            logger.info(f"Request has tools: {len(request.tools)}")
+            logger.info(f"Tool types: {[type(t).__name__ for t in request.tools]}")
             transformed_tools = self._transform_tools(request.tools)
-            logger.info(f"Transformed {len(transformed_tools)} tools for Azure OpenAI")
-            logger.info(f"First tool: {json.dumps(transformed_tools[0], indent=2) if transformed_tools else 'None'}")
+            logger.info(f"✅ Transformed {len(transformed_tools)} tools for streaming")
+            logger.info(f"First tool structure: {json.dumps(transformed_tools[0], indent=2) if transformed_tools else 'None'}")
             params["tools"] = transformed_tools
             params["tool_choice"] = "auto"
+        else:
+            logger.warning("⚠️ No tools in request for streaming!")
         
         # Make synchronous call
         response = self.client.chat.completions.create(**params)
