@@ -6,7 +6,7 @@ import asyncio
 import json
 
 from vanna.core.llm.base import LlmService
-from vanna.core.llm.models import LlmRequest, LlmResponse, Message, ToolCall
+from vanna.core.llm.models import LlmRequest, LlmResponse, LlmMessage, ToolCall
 
 
 class AzureOpenAILlmService(LlmService):
