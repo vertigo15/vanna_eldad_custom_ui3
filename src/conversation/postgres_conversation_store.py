@@ -69,10 +69,19 @@ class PostgresConversationStore(ConversationStore):
                     user_id VARCHAR(255) NOT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                    metadata JSONB DEFAULT '{}'::jsonb,
-                    INDEX idx_conversations_user_id (user_id),
-                    INDEX idx_conversations_updated_at (updated_at DESC)
+                    metadata JSONB DEFAULT '{}'::jsonb
                 )
+            """)
+            
+            # Create indexes separately
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversations_user_id 
+                ON conversations(user_id)
+            """)
+            
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversations_updated_at 
+                ON conversations(updated_at DESC)
             """)
             
             # Create messages table
@@ -84,10 +93,19 @@ class PostgresConversationStore(ConversationStore):
                     content TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
                     metadata JSONB DEFAULT '{}'::jsonb,
-                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-                    INDEX idx_messages_conversation_id (conversation_id),
-                    INDEX idx_messages_timestamp (timestamp)
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
                 )
+            """)
+            
+            # Create indexes separately
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_messages_conversation_id 
+                ON conversation_messages(conversation_id)
+            """)
+            
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_messages_timestamp 
+                ON conversation_messages(timestamp)
             """)
     
     async def close(self):
