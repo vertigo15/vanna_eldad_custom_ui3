@@ -129,6 +129,38 @@ class AzureOpenAILlmService(LlmService):
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
     
+    def _transform_tools(self, tools: List[Any]) -> List[Dict[str, Any]]:
+        """
+        Transform Vanna ToolSchema objects to Azure OpenAI tool format.
+        
+        Args:
+            tools: List of ToolSchema objects or dicts
+            
+        Returns:
+            List of tools in Azure OpenAI format
+        """
+        transformed = []
+        for tool in tools:
+            # If it's a ToolSchema object, convert to dict
+            if hasattr(tool, 'model_dump'):
+                tool_dict = tool.model_dump()
+            elif hasattr(tool, 'dict'):
+                tool_dict = tool.dict()
+            else:
+                tool_dict = tool
+            
+            # Transform to Azure OpenAI format
+            transformed.append({
+                "type": "function",
+                "function": {
+                    "name": tool_dict.get("name"),
+                    "description": tool_dict.get("description", ""),
+                    "parameters": tool_dict.get("parameters", {})
+                }
+            })
+        
+        return transformed
+    
     # Vanna 2.0 Interface Methods
     def validate_tools(self, tools: List[Dict[str, Any]]) -> bool:
         """
@@ -169,7 +201,8 @@ class AzureOpenAILlmService(LlmService):
         
         # Add tools if provided
         if hasattr(request, 'tools') and request.tools:
-            params["tools"] = request.tools
+            # Transform Vanna ToolSchema to Azure OpenAI format
+            params["tools"] = self._transform_tools(request.tools)
             params["tool_choice"] = "auto"
         
         # Make synchronous call
@@ -229,7 +262,8 @@ class AzureOpenAILlmService(LlmService):
         
         # Add tools if provided
         if hasattr(request, 'tools') and request.tools:
-            params["tools"] = request.tools
+            # Transform Vanna ToolSchema to Azure OpenAI format
+            params["tools"] = self._transform_tools(request.tools)
             params["tool_choice"] = "auto"
         
         # Create stream
