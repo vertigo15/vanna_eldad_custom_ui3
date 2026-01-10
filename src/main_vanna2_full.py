@@ -270,6 +270,7 @@ async def query_for_ui(request: QueryRequest):
             conversation_id=conversation_id
         ):
             responses.append(response)
+            logger.info(f"Response type: {type(response).__name__}, attrs: {dir(response)}")
         
         # Extract data from responses
         sql = None
@@ -279,7 +280,15 @@ async def query_for_ui(request: QueryRequest):
         insights = None
         explanation = ""
         
-        for resp in responses:
+        logger.info(f"Total responses collected: {len(responses)}")
+        
+        for i, resp in enumerate(responses):
+            logger.info(f"Response {i}: type={type(resp).__name__}")
+            
+            # Log all attributes for debugging
+            if hasattr(resp, '__dict__'):
+                logger.info(f"Response {i} attributes: {resp.__dict__}")
+            
             # Look for SQL and results in tool results
             if hasattr(resp, 'tool_result'):
                 tool_result = resp.tool_result
