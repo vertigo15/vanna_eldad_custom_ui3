@@ -1,7 +1,8 @@
 """Vanna 2.0 compatible SQL tool."""
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 import json
+from pydantic import BaseModel, Field
 
 try:
     from vanna.core.tool import Tool, ToolContext, ToolResult
@@ -24,6 +25,11 @@ except ImportError:
 from src.tools.sql_tool import PostgresSqlRunner
 
 
+class RunSqlArgs(BaseModel):
+    """Arguments for run_sql tool."""
+    sql: str = Field(description="The SQL query to execute")
+
+
 class VannaRunSqlTool(Tool):
     """
     Vanna 2.0 compatible SQL execution tool.
@@ -33,68 +39,41 @@ class VannaRunSqlTool(Tool):
     def __init__(self, sql_runner: PostgresSqlRunner):
         super().__init__()
         self.sql_runner = sql_runner
-        self.name = "run_sql"
-        self.description = "Execute a SQL query against the AdventureWorksDW database"
     
-    def get_schema(self) -> ToolSchema:
-        """
-        Get tool schema for Vanna Agent.
-        
-        Returns:
-            ToolSchema object
-        """
-        if not VANNA2_AVAILABLE:
-            # Fallback to dict
-            return {
-                "type": "function",
-                "function": {
-                    "name": self.name,
-                    "description": self.description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "sql": {
-                                "type": "string",
-                                "description": "The SQL query to execute"
-                            }
-                        },
-                        "required": ["sql"]
-                    }
-                }
-            }
-        
-        return ToolSchema(
-            name=self.name,
-            description=self.description,
-            parameters={
-                "sql": ToolParameter(
-                    type="string",
-                    description="The SQL query to execute",
-                    required=True
-                )
-            }
-        )
+    @property
+    def name(self) -> str:
+        return "run_sql"
+    
+    @property
+    def description(self) -> str:
+        return "Execute a SQL query against the AdventureWorksDW database"
+    
+    @property
+    def access_groups(self) -> List[str]:
+        return []  # Allow all users
+    
+    def get_args_schema(self) -> type[RunSqlArgs]:
+        return RunSqlArgs
+    
     
     async def execute(
         self,
         context: ToolContext,
-        sql: str,
-        **kwargs
+        args: RunSqlArgs
     ) -> ToolResult:
         """
         Execute SQL query.
         
         Args:
             context: Tool execution context (user, conversation, etc.)
-            sql: SQL query to execute
-            **kwargs: Additional arguments
+            args: Validated arguments containing SQL query
             
         Returns:
             ToolResult with query results
         """
         try:
             # Execute SQL
-            result = await self.sql_runner.run_sql(sql)
+            result = await self.sql_runner.run_sql(args.sql)
             
             if "error" in result:
                 # Return error result

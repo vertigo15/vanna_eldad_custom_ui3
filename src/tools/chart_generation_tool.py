@@ -6,18 +6,29 @@ Generates ECharts configuration from query results using LLM.
 from typing import Any, Dict, List, Optional
 import json
 import logging
+from pydantic import BaseModel, Field
 
 from vanna.core.tool import Tool, ToolContext, ToolResult
 
 logger = logging.getLogger(__name__)
 
 
+class ColumnDef(BaseModel):
+    """Column definition."""
+    name: str
+    type: str
+
+
+class ChartGenerationArgs(BaseModel):
+    """Arguments for chart generation tool."""
+    columns: List[ColumnDef] = Field(description="List of column definitions with name and type")
+    column_names: List[str] = Field(description="Simple list of column names")
+    data: List[Dict[str, Any]] = Field(description="Query result data rows")
+    chart_type: str = Field(default="auto", description="Desired chart type (auto, bar, line, pie, scatter, area)")
+
+
 class ChartGenerationTool(Tool):
     """Tool for generating chart visualizations from query results."""
-    
-    # Define as class attributes (required by abstract base class)
-    name = "generate_chart"
-    description = "Generate chart visualization from query results"
     
     def __init__(self, llm_service):
         """Initialize chart generation tool.
@@ -27,73 +38,50 @@ class ChartGenerationTool(Tool):
         """
         self.llm_service = llm_service
     
-    def get_args_schema(self) -> Dict[str, Any]:
-        """Return tool arguments schema for Vanna Agent."""
-        return {
-            "type": "object",
-            "properties": {
-                "columns": {
-                    "type": "array",
-                    "description": "List of column definitions with name and type",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "type": {"type": "string"}
-                        }
-                    }
-                },
-                "column_names": {
-                    "type": "array",
-                    "description": "Simple list of column names",
-                    "items": {"type": "string"}
-                },
-                "data": {
-                    "type": "array",
-                    "description": "Query result data rows",
-                    "items": {"type": "object"}
-                },
-                "chart_type": {
-                    "type": "string",
-                    "description": "Desired chart type (auto, bar, line, pie, scatter, area)",
-                    "default": "auto"
-                }
-            },
-            "required": ["columns", "column_names", "data"]
-        }
+    @property
+    def name(self) -> str:
+        return "generate_chart"
+    
+    @property
+    def description(self) -> str:
+        return "Generate chart visualization from query results"
+    
+    @property
+    def access_groups(self) -> List[str]:
+        return []  # Allow all users
+    
+    def get_args_schema(self) -> type[ChartGenerationArgs]:
+        return ChartGenerationArgs
     
     async def execute(
         self,
         context: ToolContext,
-        columns: List[Dict[str, str]],
-        column_names: List[str],
-        data: List[Dict[str, Any]],
-        chart_type: str = "auto"
+        args: ChartGenerationArgs
     ) -> ToolResult:
         """Execute chart generation.
         
         Args:
             context: Tool execution context from Vanna
-            columns: Column definitions with name and type
-            column_names: Simple list of column names
-            data: Query result rows
-            chart_type: Desired chart type (auto, bar, line, pie, etc.)
+            args: Validated arguments containing column info and data
             
         Returns:
             ToolResult with chart configuration
         """
-        logger.info(f"Generating chart: {len(data)} rows, {len(columns)} columns, type={chart_type}")
+        logger.info(f"Generating chart: {len(args.data)} rows, {len(args.columns)} columns, type={args.chart_type}")
         
         try:
+            # Convert Pydantic models to dicts for prompts
+            columns_dict = [col.dict() for col in args.columns]
+            
             # Build system prompt with extensive chart generation guidelines
             system_prompt = self._build_system_prompt()
             
             # Build user prompt with data
             user_prompt = self._build_user_prompt(
-                columns=columns,
-                column_names=column_names,
-                data=data,
-                chart_type=chart_type
+                columns=columns_dict,
+                column_names=args.column_names,
+                data=args.data,
+                chart_type=args.chart_type
             )
             
             # Call LLM

@@ -3,9 +3,10 @@
 Analyzes query results and generates insights using LLM.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import json
 import logging
+from pydantic import BaseModel, Field
 
 import pandas as pd
 from vanna.core.tool import Tool, ToolContext, ToolResult
@@ -13,12 +14,20 @@ from vanna.core.tool import Tool, ToolContext, ToolResult
 logger = logging.getLogger(__name__)
 
 
+class DatasetInfo(BaseModel):
+    """Dataset structure."""
+    rows: List[Dict[str, Any]]
+    columns: List[str]
+
+
+class InsightsGenerationArgs(BaseModel):
+    """Arguments for insights generation tool."""
+    dataset: Dict[str, Any] = Field(description="Query results with rows and columns")
+    question: str = Field(description="Original user question that generated this data")
+
+
 class InsightsGenerationTool(Tool):
     """Tool for generating insights from query results."""
-    
-    # Define as class attributes (required by abstract base class)
-    name = "generate_insights"
-    description = "Generate insights and findings from query results"
     
     def __init__(self, llm_service, agent_memory=None):
         """Initialize insights generation tool.
@@ -30,54 +39,40 @@ class InsightsGenerationTool(Tool):
         self.llm_service = llm_service
         self.agent_memory = agent_memory
     
-    def get_args_schema(self) -> Dict[str, Any]:
-        """Return tool arguments schema for Vanna Agent."""
-        return {
-            "type": "object",
-            "properties": {
-                "dataset": {
-                    "type": "object",
-                    "description": "Query results with rows and columns",
-                    "properties": {
-                        "rows": {
-                            "type": "array",
-                            "description": "Data rows"
-                        },
-                        "columns": {
-                            "type": "array",
-                            "description": "Column names"
-                        }
-                    }
-                },
-                "question": {
-                    "type": "string",
-                    "description": "Original user question that generated this data"
-                }
-            },
-            "required": ["dataset", "question"]
-        }
+    @property
+    def name(self) -> str:
+        return "generate_insights"
+    
+    @property
+    def description(self) -> str:
+        return "Generate insights and findings from query results"
+    
+    @property
+    def access_groups(self) -> List[str]:
+        return []  # Allow all users
+    
+    def get_args_schema(self) -> type[InsightsGenerationArgs]:
+        return InsightsGenerationArgs
     
     async def execute(
         self,
         context: ToolContext,
-        dataset: Dict[str, Any],
-        question: str
+        args: InsightsGenerationArgs
     ) -> ToolResult:
         """Execute insights generation.
         
         Args:
             context: Tool execution context from Vanna
-            dataset: Query results with rows and columns
-            question: Original user question
+            args: Validated arguments containing dataset and question
             
         Returns:
             ToolResult with insights (summary, findings, suggestions)
         """
-        logger.info(f"Generating insights for: {question[:50]}...")
+        logger.info(f"Generating insights for: {args.question[:50]}...")
         
         try:
             # Convert to DataFrame
-            df = self._dataset_to_dataframe(dataset)
+            df = self._dataset_to_dataframe(args.dataset)
             
             # Check if dataset is valid for insights
             if df.empty:
@@ -104,7 +99,7 @@ class InsightsGenerationTool(Tool):
             business_context = {}
             if self.agent_memory:
                 try:
-                    business_context = await self.agent_memory.get_context_for_question(question)
+                    business_context = await self.agent_memory.get_context_for_question(args.question)
                 except Exception as e:
                     logger.warning(f"Failed to get business context: {e}")
             
@@ -115,7 +110,7 @@ class InsightsGenerationTool(Tool):
             prompt = self._build_insight_prompt(
                 dataset_summary=dataset_summary,
                 context=business_context,
-                original_question=question
+                original_question=args.question
             )
             
             # Generate insights using LLM
