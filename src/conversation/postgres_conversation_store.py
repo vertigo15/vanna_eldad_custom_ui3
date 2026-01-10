@@ -289,6 +289,30 @@ class PostgresConversationStore(ConversationStore):
             
             return result.split()[-1] != '0'
     
+    async def update_conversation(
+        self,
+        conversation: Conversation
+    ) -> None:
+        """
+        Update a conversation's metadata and messages.
+        
+        Args:
+            conversation: Conversation object with updated data
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Update conversation metadata
+                await conn.execute("""
+                    UPDATE conversations
+                    SET updated_at = NOW(),
+                        metadata = $2
+                    WHERE id = $1
+                """, conversation.id, json.dumps(conversation.metadata))
+                
+                # Update is mainly for metadata; messages are added via save_message
+                # If needed, we could also sync messages here, but typically
+                # Vanna Agent uses save_message for adding messages
+    
     async def get_recent_messages(
         self,
         conversation_id: str,
