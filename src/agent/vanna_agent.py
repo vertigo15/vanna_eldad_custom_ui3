@@ -2,12 +2,18 @@
 
 from src.agent.llm_service import AzureOpenAILlmService
 from src.agent.user_resolver import SimpleUserResolver
+from src.agent.conversation_history import ConversationHistoryService
 from src.memory.pgvector_memory import PgVectorAgentMemory
 from src.memory.embedding_service import AzureEmbeddingService
 from src.tools.sql_tool import PostgresSqlRunner, RunSqlTool
 from src.config import settings
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from uuid import UUID, uuid4
 import json
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class VannaTextToSqlAgent:
@@ -21,27 +27,34 @@ class VannaTextToSqlAgent:
         llm_service: AzureOpenAILlmService,
         memory: PgVectorAgentMemory,
         sql_runner: PostgresSqlRunner,
-        user_resolver: SimpleUserResolver
+        user_resolver: SimpleUserResolver,
+        history_service: Optional[ConversationHistoryService] = None
     ):
         self.llm = llm_service
         self.memory = memory
         self.sql_runner = sql_runner
         self.user_resolver = user_resolver
+        self.history = history_service
         self.sql_tool = RunSqlTool(sql_runner)
     
     async def initialize(self):
         """Initialize all components."""
         await self.memory.initialize()
         await self.sql_runner.initialize()
+        if self.history:
+            await self.history.initialize()
     
     async def close(self):
         """Cleanup resources."""
         await self.memory.close()
         await self.sql_runner.close()
+        if self.history:
+            await self.history.close()
     
     async def process_question(
         self,
         question: str,
+        session_id: Optional[UUID] = None,
         user_context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
@@ -49,17 +62,47 @@ class VannaTextToSqlAgent:
         
         Args:
             question: Natural language question
+            session_id: Session UUID for conversation continuity
             user_context: Optional user context
             
         Returns:
-            Dict with 'sql', 'results', 'explanation', etc.
+            Dict with 'sql', 'results', 'explanation', 'query_id', 'session_id', etc.
         """
+        # Generate session_id if not provided
+        if not session_id:
+            session_id = uuid4()
+        
+        query_id = None
+        llm_start_time = None
+        llm_latency_ms = None
+        
         try:
             # Get user
             user = await self.user_resolver.resolve_user(user_context)
             
             # Get RAG context from pgvector
             context = await self.memory.get_context_for_question(question)
+            
+            # Log query start to history
+            if self.history:
+                try:
+                    rag_context_metadata = {
+                        "ddl_count": len(context.get('ddl', [])),
+                        "examples_count": len(context.get('sql_examples', [])),
+                        "documentation_count": len(context.get('documentation', []))
+                    }
+                    
+                    query_id = await self.history.log_query(
+                        user_id=user.id,
+                        session_id=session_id,
+                        natural_language_query=question,
+                        dataset_id="AdventureWorksDW",
+                        schema_context=None,  # Could add table list here if needed
+                        rag_context=rag_context_metadata
+                    )
+                except Exception as e:
+                    # Don't let logging failures break the flow
+                    logger.error(f"Failed to log query start: {e}")
             
             # Build enhanced system prompt with RAG context
             system_prompt = self._build_system_prompt(context)
@@ -74,15 +117,19 @@ class VannaTextToSqlAgent:
             tools = [self.sql_tool.get_schema()]
             
             # Generate SQL using LLM with tool calling
+            llm_start_time = time.time()
             response = await self.llm.generate(
                 messages=messages,
                 temperature=0.3,
                 max_tokens=2048,
                 tools=tools
             )
+            llm_latency_ms = int((time.time() - llm_start_time) * 1000)
             
             result = {
                 "question": question,
+                "query_id": query_id,
+                "session_id": session_id,
                 "sql": None,
                 "results": None,
                 "explanation": response.get("content", ""),
@@ -101,9 +148,49 @@ class VannaTextToSqlAgent:
                         if sql:
                             result["sql"] = sql
                             
+                            # Log LLM response to history
+                            if self.history and query_id:
+                                try:
+                                    await self.history.update_llm_response(
+                                        query_id=query_id,
+                                        generated_sql=sql,
+                                        llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+                                        llm_latency_ms=llm_latency_ms,
+                                        tokens_used=response.get("usage", {}).get("total_tokens", 0)
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to log LLM response: {e}")
+                            
                             # Execute SQL
+                            exec_start_time = time.time()
                             query_result = await self.sql_runner.run_sql(sql)
+                            exec_time_ms = int((time.time() - exec_start_time) * 1000)
                             result["results"] = query_result
+                            
+                            # Log execution results to history
+                            if self.history and query_id:
+                                try:
+                                    if "error" not in query_result:
+                                        rows = query_result.get("rows", [])
+                                        await self.history.update_execution(
+                                            query_id=query_id,
+                                            execution_status="success",
+                                            execution_time_ms=exec_time_ms,
+                                            row_count=len(rows),
+                                            result_preview=rows[:10] if rows else None,
+                                            error_message=None
+                                        )
+                                    else:
+                                        await self.history.update_execution(
+                                            query_id=query_id,
+                                            execution_status="error",
+                                            execution_time_ms=exec_time_ms,
+                                            row_count=0,
+                                            result_preview=None,
+                                            error_message=query_result["error"]
+                                        )
+                                except Exception as e:
+                                    logger.error(f"Failed to log execution results: {e}")
                             
                             # Save successful usage to memory
                             if "error" not in query_result:
@@ -122,8 +209,50 @@ class VannaTextToSqlAgent:
                 sql = self._extract_sql_from_text(response["content"])
                 if sql:
                     result["sql"] = sql
+                    
+                    # Log LLM response to history
+                    if self.history and query_id:
+                        try:
+                            await self.history.update_llm_response(
+                                query_id=query_id,
+                                generated_sql=sql,
+                                llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+                                llm_latency_ms=llm_latency_ms,
+                                tokens_used=response.get("usage", {}).get("total_tokens", 0)
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to log LLM response: {e}")
+                    
+                    # Execute SQL
+                    exec_start_time = time.time()
                     query_result = await self.sql_runner.run_sql(sql)
+                    exec_time_ms = int((time.time() - exec_start_time) * 1000)
                     result["results"] = query_result
+                    
+                    # Log execution results to history
+                    if self.history and query_id:
+                        try:
+                            if "error" not in query_result:
+                                rows = query_result.get("rows", [])
+                                await self.history.update_execution(
+                                    query_id=query_id,
+                                    execution_status="success",
+                                    execution_time_ms=exec_time_ms,
+                                    row_count=len(rows),
+                                    result_preview=rows[:10] if rows else None,
+                                    error_message=None
+                                )
+                            else:
+                                await self.history.update_execution(
+                                    query_id=query_id,
+                                    execution_status="error",
+                                    execution_time_ms=exec_time_ms,
+                                    row_count=0,
+                                    result_preview=None,
+                                    error_message=query_result["error"]
+                                )
+                        except Exception as e:
+                            logger.error(f"Failed to log execution results: {e}")
                     
                     if "error" not in query_result:
                         await self.memory.save_tool_usage(
@@ -137,8 +266,24 @@ class VannaTextToSqlAgent:
             return result
             
         except Exception as e:
+            # Log error to history if query was created
+            if self.history and query_id:
+                try:
+                    await self.history.update_execution(
+                        query_id=query_id,
+                        execution_status="error",
+                        execution_time_ms=None,
+                        row_count=0,
+                        result_preview=None,
+                        error_message=str(e)
+                    )
+                except Exception as log_error:
+                    logger.error(f"Failed to log error to history: {log_error}")
+            
             return {
                 "question": question,
+                "query_id": query_id,
+                "session_id": session_id,
                 "sql": None,
                 "results": None,
                 "explanation": None,
@@ -252,12 +397,18 @@ async def create_vanna_agent() -> VannaTextToSqlAgent:
     # User resolver
     user_resolver = SimpleUserResolver()
     
+    # Initialize conversation history service (same database as pgvector)
+    history_service = ConversationHistoryService(
+        connection_string=settings.pgvector_connection_string
+    )
+    
     # Create agent
     agent = VannaTextToSqlAgent(
         llm_service=llm_service,
         memory=agent_memory,
         sql_runner=sql_runner,
-        user_resolver=user_resolver
+        user_resolver=user_resolver,
+        history_service=history_service
     )
     
     # Initialize

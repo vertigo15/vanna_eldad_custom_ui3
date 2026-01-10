@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+from uuid import UUID, uuid4
 import logging
 import json
 
@@ -65,12 +66,15 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     """Request model for SQL query."""
     question: str
+    session_id: Optional[UUID] = None  # For conversation continuity
     user_context: Optional[Dict[str, Any]] = None
 
 
 class QueryResponse(BaseModel):
     """Response model for SQL query."""
     question: str
+    query_id: Optional[UUID] = None  # ID for feedback/history tracking
+    session_id: Optional[UUID] = None  # Session for conversation continuity
     sql: Optional[str]
     results: Optional[Dict[str, Any]]
     explanation: Optional[str]
@@ -146,6 +150,7 @@ async def query_database(request: QueryRequest):
     try:
         result = await agent.process_question(
             question=request.question,
+            session_id=request.session_id,
             user_context=request.user_context or {}
         )
         
@@ -196,6 +201,7 @@ class GenerateInsightsRequest(BaseModel):
     """Request model for insights generation."""
     dataset: Dict[str, Any]  # Query results with 'rows' and 'columns'
     question: str  # Original user question
+    query_id: Optional[UUID] = None  # For linking insights to query history
 
 
 class GenerateInsightsResponse(BaseModel):
@@ -226,19 +232,56 @@ async def generate_insights_endpoint(request: GenerateInsightsRequest):
     try:
         # Import insight service
         from src.agent.insight_service import generate_insights
+        import time
         
         # Get context from agent memory (for business rules)
         context = await agent.memory.get_context_for_question(request.question)
         
-        # Generate insights (async call)
+        # Generate insights (async call) with timing
+        start_time = time.time()
         insights = await generate_insights(
             dataset=request.dataset,
             context=context,
             original_question=request.question,
             llm_service=agent.llm
         )
+        exec_time_ms = int((time.time() - start_time) * 1000)
         
         logger.info(f"Insights generated: {len(insights.get('findings', []))} findings")
+        
+        # Log insights to history if query_id provided
+        if agent.history and request.query_id:
+            try:
+                # Log summary
+                await agent.history.add_insight(
+                    query_id=request.query_id,
+                    insight_type="summary",
+                    content=insights.get("summary", "Analysis complete"),
+                    llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+                    llm_execution_time_ms=exec_time_ms,
+                    tokens_input=insights.get("usage", {}).get("prompt_tokens", 0),
+                    tokens_output=insights.get("usage", {}).get("completion_tokens", 0)
+                )
+                
+                # Log each finding
+                for finding in insights.get("findings", []):
+                    await agent.history.add_insight(
+                        query_id=request.query_id,
+                        insight_type="finding",
+                        content=finding,
+                        llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME
+                    )
+                
+                # Log each suggestion
+                for suggestion in insights.get("suggestions", []):
+                    await agent.history.add_insight(
+                        query_id=request.query_id,
+                        insight_type="suggestion",
+                        content=suggestion,
+                        llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME
+                    )
+            except Exception as e:
+                logger.error(f"Failed to log insights to history: {e}")
         
         return GenerateInsightsResponse(
             summary=insights.get("summary", "Analysis complete"),
@@ -690,6 +733,76 @@ Return ONLY the ECharts configuration JSON. No explanatory text."""
             status_code=500,
             detail=f"Chart generation failed: {str(e)}"
         )
+
+
+# Feedback and conversation history endpoints
+class FeedbackRequest(BaseModel):
+    """Request model for user feedback."""
+    query_id: UUID
+    feedback: str  # 'thumbs_up', 'thumbs_down', 'edited'
+    corrected_sql: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.post("/api/feedback")
+async def record_feedback(request: FeedbackRequest):
+    """
+    Record user feedback for a query.
+    
+    Args:
+        request: FeedbackRequest with query_id and feedback
+        
+    Returns:
+        Success message
+    """
+    if not agent or not agent.history:
+        raise HTTPException(status_code=503, detail="History service not available")
+    
+    logger.info(f"Recording {request.feedback} feedback for query {request.query_id}")
+    
+    try:
+        await agent.history.record_feedback(
+            query_id=request.query_id,
+            user_feedback=request.feedback,
+            corrected_sql=request.corrected_sql,
+            feedback_notes=request.notes
+        )
+        
+        return {"status": "success", "message": "Feedback recorded"}
+        
+    except Exception as e:
+        logger.error(f"Error recording feedback: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/conversation/{session_id}")
+async def get_conversation_history(session_id: UUID, include_insights: bool = True):
+    """
+    Retrieve conversation history for a session.
+    
+    Args:
+        session_id: Session UUID
+        include_insights: Whether to include insights for each query
+        
+    Returns:
+        Conversation history with all queries and insights
+    """
+    if not agent or not agent.history:
+        raise HTTPException(status_code=503, detail="History service not available")
+    
+    logger.info(f"Retrieving conversation history for session {session_id}")
+    
+    try:
+        history = await agent.history.get_conversation_history(
+            session_id=session_id,
+            include_insights=include_insights
+        )
+        
+        return history
+        
+    except Exception as e:
+        logger.error(f"Error retrieving conversation history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
