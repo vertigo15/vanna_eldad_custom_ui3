@@ -107,6 +107,7 @@ async def lifespan(app: FastAPI):
             llm_service=llm_service,
             tool_registry=tool_registry,
             user_resolver=user_resolver,
+            agent_memory=agent_memory,  # Required parameter
             conversation_store=conversation_store,
             config=agent_config
         )
