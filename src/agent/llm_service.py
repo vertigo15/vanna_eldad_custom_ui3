@@ -4,12 +4,19 @@ from openai import AzureOpenAI
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import asyncio
 import json
+import logging
+
+from vanna.core.llm.base import LlmService
+from vanna.core.llm.models import LlmRequest, LlmResponse, LlmMessage, ToolCall
+
+logger = logging.getLogger(__name__)
 
 
-class AzureOpenAILlmService:
+class AzureOpenAILlmService(LlmService):
     """
     Azure OpenAI LLM service for Vanna 2.0.
     Provides text generation capabilities using Azure OpenAI.
+    Implements Vanna's LlmService interface.
     """
     
     def __init__(
@@ -19,6 +26,7 @@ class AzureOpenAILlmService:
         deployment: str,
         api_version: str = "2025-01-01-preview"
     ):
+        super().__init__()
         self.client = AzureOpenAI(
             api_key=api_key,
             api_version=api_version,
@@ -120,5 +128,178 @@ class AzureOpenAILlmService:
         
         # Yield chunks
         for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            if chunk.choices and len(chunk.choices) > 0:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+    
+    def _transform_tools(self, tools: List[Any]) -> List[Dict[str, Any]]:
+        """
+        Transform Vanna ToolSchema objects to Azure OpenAI tool format.
+        
+        Args:
+            tools: List of ToolSchema objects or dicts
+            
+        Returns:
+            List of tools in Azure OpenAI format
+        """
+        transformed = []
+        for tool in tools:
+            # If it's a ToolSchema object, convert to dict
+            if hasattr(tool, 'model_dump'):
+                tool_dict = tool.model_dump()
+            elif hasattr(tool, 'dict'):
+                tool_dict = tool.dict()
+            else:
+                tool_dict = tool
+            
+            # Transform to Azure OpenAI format
+            transformed.append({
+                "type": "function",
+                "function": {
+                    "name": tool_dict.get("name"),
+                    "description": tool_dict.get("description", ""),
+                    "parameters": tool_dict.get("parameters", {})
+                }
+            })
+        
+        return transformed
+    
+    # Vanna 2.0 Interface Methods
+    def validate_tools(self, tools: List[Dict[str, Any]]) -> bool:
+        """
+        Validate that tools are in correct format for Azure OpenAI.
+        
+        Args:
+            tools: List of tool definitions
+            
+        Returns:
+            True if tools are valid
+        """
+        # Azure OpenAI supports tool calling, so we accept all tools
+        # In a production environment, you might want to validate schema here
+        return True
+    
+    def send_request(self, request: LlmRequest) -> LlmResponse:
+        """
+        Send request to LLM (Vanna 2.0 interface).
+        
+        Args:
+            request: LlmRequest object
+            
+        Returns:
+            LlmResponse object
+        """
+        # Convert Vanna's Message objects to dicts for OpenAI
+        messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        params = {
+            "model": self.deployment,
+            "messages": messages,
+            "temperature": request.temperature if hasattr(request, 'temperature') else 0.7,
+            "max_completion_tokens": request.max_tokens if hasattr(request, 'max_tokens') else 4096,
+        }
+        
+        # Add tools if provided
+        if hasattr(request, 'tools') and request.tools:
+            # Transform Vanna ToolSchema to Azure OpenAI format
+            logger.info(f"Request has tools: {len(request.tools)}")
+            logger.info(f"Tool types: {[type(t).__name__ for t in request.tools]}")
+            transformed_tools = self._transform_tools(request.tools)
+            logger.info(f"✅ Transformed {len(transformed_tools)} tools for streaming")
+            logger.info(f"First tool structure: {json.dumps(transformed_tools[0], indent=2) if transformed_tools else 'None'}")
+            params["tools"] = transformed_tools
+            params["tool_choice"] = "auto"
+        else:
+            logger.warning("⚠️ No tools in request for streaming!")
+        
+        # Make synchronous call
+        response = self.client.chat.completions.create(**params)
+        
+        choice = response.choices[0]
+        
+        # Build LlmResponse
+        tool_calls = []
+        if choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                tool_calls.append(
+                    ToolCall(
+                        id=tc.id,
+                        type=tc.type,
+                        function_name=tc.function.name,
+                        function_arguments=tc.function.arguments
+                    )
+                )
+        
+        return LlmResponse(
+            content=choice.message.content or "",
+            tool_calls=tool_calls,
+            finish_reason=choice.finish_reason,
+            metadata={
+                "model": self.deployment,
+                "usage": response.usage.model_dump() if response.usage else {}
+            }
+        )
+    
+    async def stream_request(self, request: LlmRequest) -> AsyncGenerator[LlmResponse, None]:
+        """
+        Stream request to LLM (Vanna 2.0 interface).
+        
+        Args:
+            request: LlmRequest object
+            
+        Yields:
+            LlmResponse chunks
+        """
+        logger.info("🔵 stream_request called")
+        logger.info(f"Request object type: {type(request).__name__}")
+        logger.info(f"Request has 'tools' attr: {hasattr(request, 'tools')}")
+        
+        # Convert messages
+        messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        loop = asyncio.get_event_loop()
+        
+        # Build params
+        params = {
+            "model": self.deployment,
+            "messages": messages,
+            "temperature": request.temperature if hasattr(request, 'temperature') else 0.7,
+            "max_completion_tokens": request.max_tokens if hasattr(request, 'max_tokens') else 4096,
+            "stream": True
+        }
+        
+        # Add tools if provided
+        logger.info(f"Checking tools: has attr={hasattr(request, 'tools')}, value={getattr(request, 'tools', 'NO ATTR')}")
+        if hasattr(request, 'tools') and request.tools:
+            # Transform Vanna ToolSchema to Azure OpenAI format
+            logger.info(f"✅ Request HAS tools: {len(request.tools)} tools")
+            transformed = self._transform_tools(request.tools)
+            logger.info(f"Transformed first tool: {json.dumps(transformed[0], indent=2) if transformed else 'None'}")
+            params["tools"] = transformed
+            params["tool_choice"] = "auto"
+        else:
+            logger.warning(f"⚠️ No tools! request.tools = {getattr(request, 'tools', 'NO ATTR')}")
+        
+        # Create stream
+        stream = await loop.run_in_executor(
+            None,
+            lambda: self.client.chat.completions.create(**params)
+        )
+        
+        # Yield chunks as LlmResponse
+        for chunk in stream:
+            if chunk.choices and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield LlmResponse(
+                        content=delta.content,
+                        tool_calls=[],
+                        finish_reason=None,
+                        metadata={"chunk": True}
+                    )

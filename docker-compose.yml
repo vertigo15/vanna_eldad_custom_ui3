@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: vanna
       POSTGRES_PASSWORD: vanna_secure_password_123
     ports:
-      - "5433:5432"  # External 5433 to avoid conflict
+      - "5432:5432"
     volumes:
       - pgvector_data:/var/lib/postgresql/data
       - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init.sql

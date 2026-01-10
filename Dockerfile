@@ -19,5 +19,6 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application  
+# Use Option 3: Full Vanna 2.0 Agent with SQL, Chart, and Insights tools
+CMD ["uvicorn", "src.main_vanna2_full:app", "--host", "0.0.0.0", "--port", "8000"]

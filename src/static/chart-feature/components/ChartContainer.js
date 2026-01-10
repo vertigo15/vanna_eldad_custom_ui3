@@ -57,6 +57,9 @@ export class ChartContainer {
         console.log('[ChartContainer] Rendering chart:', config.type);
         
         try {
+            // Always hide loading state (even if it wasn't showing, it's safe)
+            this.chartInstance.hideLoading();
+            
             // Clear previous chart
             this.chartInstance.clear();
             
@@ -159,12 +162,25 @@ export class ChartContainer {
     showLoading() {
         const container = document.getElementById(this.containerId);
         if (container) {
-            container.innerHTML = `
-                <div class="chart-loading">
-                    <div class="spinner"></div>
-                    <p>Loading chart...</p>
-                </div>
-            `;
+            // If chart instance exists, clear it but don't destroy the container
+            if (this.chartInstance) {
+                this.chartInstance.clear();
+                this.chartInstance.showLoading('default', {
+                    text: 'Loading chart...',
+                    color: '#667eea',
+                    textColor: '#333',
+                    maskColor: 'rgba(255, 255, 255, 0.8)',
+                    zlevel: 0
+                });
+            } else {
+                // No chart instance yet, can safely replace innerHTML
+                container.innerHTML = `
+                    <div class="chart-loading">
+                        <div class="spinner"></div>
+                        <p>Loading chart...</p>
+                    </div>
+                `;
+            }
         }
     }
     
