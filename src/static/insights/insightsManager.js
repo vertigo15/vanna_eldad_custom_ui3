@@ -15,8 +15,9 @@ class InsightsManager {
      * Generate and display insights for query results
      * @param {Object} results - Query results with rows and columns
      * @param {string} question - Original user question
+     * @param {string} queryId - Query ID for linking to history (optional)
      */
-    async generateInsights(results, question) {
+    async generateInsights(results, question, queryId = null) {
         console.log('[InsightsManager] Generating insights');
         
         const container = document.getElementById('insights-container');
@@ -31,13 +32,21 @@ class InsightsManager {
 
         try {
             // Call insights API
+            const requestBody = {
+                dataset: results,
+                question: question
+            };
+            
+            // Add query_id if provided (for history logging)
+            if (queryId) {
+                requestBody.query_id = queryId;
+                console.log('[InsightsManager] Including query_id for history:', queryId);
+            }
+            
             const response = await fetch('/api/generate-insights', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    dataset: results,
-                    question: question
-                }),
+                body: JSON.stringify(requestBody),
                 signal: AbortSignal.timeout(30000)
             });
 

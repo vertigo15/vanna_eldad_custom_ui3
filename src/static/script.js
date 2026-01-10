@@ -1,11 +1,13 @@
 // Import chart manager
 import { ChartManager } from './chart-feature/chartManager.js';
 
-// UI State
-let currentSql = '';
-let currentResults = null;
-let currentPrompt = '';
+// Global state
 let currentQuestion = '';
+let currentSql = '';
+let currentPrompt = '';
+let currentResults = null;
+let currentQueryId = null;  // For conversation history tracking
+let currentSessionId = null;  // For conversation continuity
 let allTables = [];
 let promptExpanded = false;
 let sqlExpanded = false;
@@ -64,8 +66,18 @@ function displayResults(data) {
     sqlExpanded = false;
     promptExpanded = false;
     
-    // Store current question
+    // Store current question and IDs for history tracking
     currentQuestion = data.question;
+    currentQueryId = data.query_id || null;
+    currentSessionId = data.session_id || null;
+    
+    // Log conversation IDs
+    if (currentQueryId) {
+        console.log('[History] Query ID:', currentQueryId);
+    }
+    if (currentSessionId) {
+        console.log('[History] Session ID:', currentSessionId);
+    }
     
     // Show results section
     const resultsSection = document.getElementById('results-section');
@@ -121,8 +133,8 @@ function displayResults(data) {
         // Initialize chart feature
         initializeChartFeature(data.results);
         
-        // Generate insights in parallel (non-blocking)
-        generateInsights(data.results, currentQuestion);
+        // Generate insights in parallel (non-blocking) with query_id
+        generateInsights(data.results, currentQuestion, currentQueryId);
         
         // Initialize profiling section (collapsed by default)
         if (typeof profilingManager !== 'undefined') {
@@ -588,7 +600,7 @@ function initializeChartFeature(results) {
 }
 
 // Insights Feature
-function generateInsights(results, question) {
+function generateInsights(results, question, queryId = null) {
     // Initialize insights manager if needed
     if (!insightsManager) {
         insightsManager = new window.InsightsManager();
@@ -600,9 +612,9 @@ function generateInsights(results, question) {
         insightsContainer.style.display = 'block';
     }
     
-    // Generate insights asynchronously (non-blocking)
+    // Generate insights asynchronously (non-blocking) with query_id for history
     setTimeout(() => {
-        insightsManager.generateInsights(results, question);
+        insightsManager.generateInsights(results, question, queryId);
     }, 0);
 }
 
