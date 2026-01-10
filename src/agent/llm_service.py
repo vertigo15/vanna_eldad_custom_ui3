@@ -218,16 +218,24 @@ class AzureOpenAILlmService(LlmService):
         
         loop = asyncio.get_event_loop()
         
+        # Build params
+        params = {
+            "model": self.deployment,
+            "messages": messages,
+            "temperature": request.temperature if hasattr(request, 'temperature') else 0.7,
+            "max_completion_tokens": request.max_tokens if hasattr(request, 'max_tokens') else 4096,
+            "stream": True
+        }
+        
+        # Add tools if provided
+        if hasattr(request, 'tools') and request.tools:
+            params["tools"] = request.tools
+            params["tool_choice"] = "auto"
+        
         # Create stream
         stream = await loop.run_in_executor(
             None,
-            lambda: self.client.chat.completions.create(
-                model=self.deployment,
-                messages=messages,
-                temperature=request.temperature if hasattr(request, 'temperature') else 0.7,
-                max_completion_tokens=request.max_tokens if hasattr(request, 'max_tokens') else 4096,
-                stream=True
-            )
+            lambda: self.client.chat.completions.create(**params)
         )
         
         # Yield chunks as LlmResponse
