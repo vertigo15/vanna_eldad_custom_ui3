@@ -20,6 +20,6 @@ COPY . .
 EXPOSE 8000
 
 # Run the application
-# Use Option 2: Conversation history with custom orchestration
-# This works better with the existing UI
-CMD ["uvicorn", "src.main_vanna2:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use Option 3: Full Vanna 2.0 Agent with all tools
+# ChartGenerationTool and InsightsGenerationTool included
+CMD ["uvicorn", "src.main_vanna2_full:app", "--host", "0.0.0.0", "--port", "8000"]

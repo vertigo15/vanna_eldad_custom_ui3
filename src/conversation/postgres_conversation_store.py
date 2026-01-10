@@ -47,11 +47,29 @@ class PostgresConversationStore(ConversationStore):
     """
     PostgreSQL-based conversation store.
     Stores conversation history in pgvector database.
+    Compatible with both Vanna User objects and string user_ids.
     """
     
     def __init__(self, connection_string: str):
         self.connection_string = connection_string
         self.pool: Optional[asyncpg.Pool] = None
+    
+    def _extract_user_id(self, user) -> str:
+        """
+        Extract user_id from User object or string.
+        
+        Args:
+            user: User object (with .id attribute) or string user_id
+            
+        Returns:
+            str: The user_id
+        """
+        if isinstance(user, str):
+            return user
+        elif hasattr(user, 'id'):
+            return user.id
+        else:
+            return str(user)
     
     async def initialize(self):
         """Initialize connection pool and create tables."""
@@ -126,8 +144,10 @@ class PostgresConversationStore(ConversationStore):
         Args:
             conversation_id: Conversation ID
             message: Message to save
-            user_id: User ID
+            user_id: User ID or User object
         """
+        user_id_str = self._extract_user_id(user_id)
+        
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 # Ensure conversation exists
@@ -136,7 +156,7 @@ class PostgresConversationStore(ConversationStore):
                     VALUES ($1, $2, NOW(), NOW())
                     ON CONFLICT (id) DO UPDATE
                     SET updated_at = NOW()
-                """, conversation_id, user_id)
+                """, conversation_id, user_id_str)
                 
                 # Insert message
                 await conn.execute("""
@@ -161,18 +181,20 @@ class PostgresConversationStore(ConversationStore):
         
         Args:
             conversation_id: Conversation ID
-            user_id: User ID (for security check)
+            user_id: User ID or User object (for security check)
             
         Returns:
             Conversation object or None if not found
         """
+        user_id_str = self._extract_user_id(user_id)
+        
         async with self.pool.acquire() as conn:
             # Get conversation
             conv_row = await conn.fetchrow("""
                 SELECT id, user_id, created_at, updated_at, metadata
                 FROM conversations
                 WHERE id = $1 AND user_id = $2
-            """, conversation_id, user_id)
+            """, conversation_id, user_id_str)
             
             if not conv_row:
                 return None
@@ -213,12 +235,14 @@ class PostgresConversationStore(ConversationStore):
         List conversations for a user.
         
         Args:
-            user_id: User ID
+            user_id: User ID or User object
             limit: Maximum number of conversations to return
             
         Returns:
             List of conversations (without messages, for performance)
         """
+        user_id_str = self._extract_user_id(user_id)
+        
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT id, user_id, created_at, updated_at, metadata
@@ -226,7 +250,7 @@ class PostgresConversationStore(ConversationStore):
                 WHERE user_id = $1
                 ORDER BY updated_at DESC
                 LIMIT $2
-            """, user_id, limit)
+            """, user_id_str, limit)
             
             return [
                 Conversation(
@@ -250,16 +274,18 @@ class PostgresConversationStore(ConversationStore):
         
         Args:
             conversation_id: Conversation ID
-            user_id: User ID (for security check)
+            user_id: User ID or User object (for security check)
             
         Returns:
             True if deleted, False if not found
         """
+        user_id_str = self._extract_user_id(user_id)
+        
         async with self.pool.acquire() as conn:
             result = await conn.execute("""
                 DELETE FROM conversations
                 WHERE id = $1 AND user_id = $2
-            """, conversation_id, user_id)
+            """, conversation_id, user_id_str)
             
             return result.split()[-1] != '0'
     
@@ -274,12 +300,14 @@ class PostgresConversationStore(ConversationStore):
         
         Args:
             conversation_id: Conversation ID
-            user_id: User ID
+            user_id: User ID or User object
             limit: Maximum number of messages to return
             
         Returns:
             List of recent messages
         """
+        user_id_str = self._extract_user_id(user_id)
+        
         async with self.pool.acquire() as conn:
             # Verify user owns conversation
             conv_exists = await conn.fetchval("""
@@ -287,7 +315,7 @@ class PostgresConversationStore(ConversationStore):
                     SELECT 1 FROM conversations
                     WHERE id = $1 AND user_id = $2
                 )
-            """, conversation_id, user_id)
+            """, conversation_id, user_id_str)
             
             if not conv_exists:
                 return []

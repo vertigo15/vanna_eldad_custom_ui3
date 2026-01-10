@@ -18,6 +18,8 @@ from src.memory.pgvector_memory import PgVectorAgentMemory
 from src.memory.embedding_service import AzureEmbeddingService
 from src.tools.sql_tool import PostgresSqlRunner
 from src.tools.vanna_sql_tool import VannaRunSqlTool
+from src.tools.chart_generation_tool import ChartGenerationTool
+from src.tools.insights_generation_tool import InsightsGenerationTool
 from src.conversation import PostgresConversationStore
 from src.config import settings
 
@@ -86,12 +88,29 @@ async def lifespan(app: FastAPI):
         
         # Create tool registry
         tool_registry = ToolRegistry()
+        
+        # Register SQL tool
         sql_tool = VannaRunSqlTool(sql_runner)
         tool_registry.register_local_tool(
             sql_tool,
             access_groups=[]  # Allow all users
         )
-        logger.info("✅ Tool registry created")
+        
+        # Register chart generation tool
+        chart_tool = ChartGenerationTool(llm_service)
+        tool_registry.register_local_tool(
+            chart_tool,
+            access_groups=[]
+        )
+        
+        # Register insights generation tool
+        insights_tool = InsightsGenerationTool(llm_service, agent_memory)
+        tool_registry.register_local_tool(
+            insights_tool,
+            access_groups=[]
+        )
+        
+        logger.info("✅ Tool registry created with SQL, Chart, and Insights tools")
         
         # Configure Vanna Agent
         agent_config = AgentConfig(
@@ -250,30 +269,61 @@ async def query_for_ui(request: QueryRequest):
         ):
             responses.append(response)
         
-        # Extract SQL and results from responses
+        # Extract data from responses
         sql = None
         results = None
+        chart_config = None
+        chart_type = None
+        insights = None
         explanation = ""
         
         for resp in responses:
-            # Look for SQL in tool results
+            # Look for SQL and results in tool results
             if hasattr(resp, 'tool_result'):
                 tool_result = resp.tool_result
-                if hasattr(tool_result, 'data'):
-                    results = tool_result.data
+                if hasattr(tool_result, 'data') and tool_result.data:
+                    data = tool_result.data
+                    
+                    # Check if this is SQL results
+                    if isinstance(data, dict):
+                        if 'sql' in data:
+                            sql = data['sql']
+                        if 'rows' in data and 'columns' in data:
+                            results = data
+                        
+                        # Check if this is chart data
+                        if 'chart_config' in data:
+                            chart_config = data['chart_config']
+                            chart_type = data.get('chart_type', 'bar')
+                        
+                        # Check if this is insights data
+                        if 'summary' in data and 'findings' in data:
+                            insights = data
             
             # Collect explanation text
-            if hasattr(resp, 'content'):
+            if hasattr(resp, 'content') and resp.content:
                 explanation += resp.content
         
-        return {
+        # Build response
+        response_data = {
             "question": request.question,
             "sql": sql,
             "results": results,
-            "explanation": explanation,
+            "explanation": explanation.strip() if explanation else None,
             "conversation_id": conversation_id,
             "error": None
         }
+        
+        # Add chart if generated
+        if chart_config:
+            response_data["chart_config"] = chart_config
+            response_data["chart_type"] = chart_type
+        
+        # Add insights if generated
+        if insights:
+            response_data["insights"] = insights
+        
+        return response_data
         
     except Exception as e:
         logger.error(f"Error in UI query endpoint: {e}", exc_info=True)
