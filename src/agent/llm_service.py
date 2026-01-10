@@ -129,6 +129,20 @@ class AzureOpenAILlmService(LlmService):
                 yield chunk.choices[0].delta.content
     
     # Vanna 2.0 Interface Methods
+    def validate_tools(self, tools: List[Dict[str, Any]]) -> bool:
+        """
+        Validate that tools are in correct format for Azure OpenAI.
+        
+        Args:
+            tools: List of tool definitions
+            
+        Returns:
+            True if tools are valid
+        """
+        # Azure OpenAI supports tool calling, so we accept all tools
+        # In a production environment, you might want to validate schema here
+        return True
+    
     def send_request(self, request: LlmRequest) -> LlmResponse:
         """
         Send request to LLM (Vanna 2.0 interface).
