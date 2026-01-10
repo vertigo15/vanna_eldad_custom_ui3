@@ -415,27 +415,72 @@ Choose the BEST chart type based on your analysis:
 | **Radar** | Multi-dimensional comparison | 3-8 metrics per item |
 | **Candlestick** | Financial OHLC data | Open, High, Low, Close values |
 
-## 3. String Formatters (No JavaScript Functions!)
+## 3. Number Formatting
 
-Use ECharts template strings instead of functions:
+**CRITICAL: Apply smart number formatting to make charts readable**
+
+### Large Numbers — Use K/M/B Abbreviations:
+- < 1,000: Show as-is (e.g., 850)
+- 1,000 - 999,999: X.XK (e.g., 1.2K, 45.8K, 850K)
+- 1,000,000 - 999,999,999: X.XM (e.g., 1.2M, 45.8M)
+- ≥ 1,000,000,000: X.XB (e.g., 1.2B, 3.5B)
+
+### Decimal Precision:
+- Currency/Money: 0-2 decimals (e.g., $1.2M, $45.80)
+- Percentages: 1 decimal (e.g., 45.5%)
+- Counts/Units: 0 decimals (e.g., 1.2K not 1.23K)
+- Ratios/Rates: 2 decimals (e.g., 3.45)
+
+### Auto-Detection Rules:
+**Currency:** If column name contains: price, amount, revenue, sales, cost, profit, total → Add $ prefix
+**Percentage:** If column name contains: percent, pct, rate, ratio, share → Add % suffix
+
+### Implementation:
+1. Transform the data values BEFORE passing to ECharts
+2. For Y-axis with values ≥ 1000, divide by appropriate scale and add suffix
+3. Update axis labels to show scale (e.g., "Sales Amount (Millions)")
+4. Format tooltip to show original values with K/M/B notation
+
+### Example with large numbers:
+Instead of:
+```
+"yAxis": { "type": "value" },
+"series": [{ "data": [1200000, 1500000, 850000] }]
+```
+
+Use:
+```
+"yAxis": { 
+  "type": "value",
+  "name": "Sales (USD)",
+  "axisLabel": { "formatter": "{value}M" }
+},
+"series": [{ "data": [1.2, 1.5, 0.85] }]
+```
+
+And add to tooltip:
+```
+"tooltip": {
+  "formatter": "{b}<br/>{a}: ${c}M"
+}
+```
+
+## 4. String Formatters
+
+Use ECharts template strings:
 
 ### Tooltip Formatters:
 - `{a}` - Series name
 - `{b}` - Category name (x-axis value)
 - `{c}` - Data value
 - `{d}` - Percentage (pie/funnel charts)
-- `{e}` - Data name
 
 ### Label Formatters:
 - `"{b}: {c}"` → "January: 150"
-- `"{b}\n{d}%"` → "Sales\n25%"
-- `"{c} units"` → "150 units"
+- `"{c}K"` → "1.2K" (for thousands)
+- `"${c}M"` → "$1.2M" (for millions)
 
-### Axis Label Formatters:
-- `"{value} kg"` → "100 kg"
-- `"{value}%"` → "50%"
-
-## 4. Layout and Spacing Requirements
+## 5. Layout and Spacing Requirements
 
 **CRITICAL - Prevent Overlapping Elements:**
 - Title and legend must NEVER overlap
@@ -449,7 +494,7 @@ Use ECharts template strings instead of functions:
 2. **Title left + Legend right**: `{title: {left: "left"}, legend: {right: 10, top: "middle"}}`
 3. **Title top-left + Legend bottom**: `{title: {left: "left", top: 10}, legend: {bottom: 10}}`
 
-## 5. Return Requirements
+## 6. Return Requirements
 
 - Return ONLY valid JSON (no explanatory text before or after)
 - Do NOT wrap JSON in markdown code blocks (no ```json)
@@ -457,7 +502,7 @@ Use ECharts template strings instead of functions:
 - Ensure all property names are double-quoted
 - Use arrays for data, not objects with numeric keys
 
-## 6. ECharts Examples
+## 7. ECharts Examples
 
 ### Line Chart (Time Series with Consolidated Dates)
 {
@@ -732,6 +777,177 @@ Return ONLY the ECharts configuration JSON. No explanatory text."""
         raise HTTPException(
             status_code=500,
             detail=f"Chart generation failed: {str(e)}"
+        )
+
+
+class EnhanceChartRequest(BaseModel):
+    """Request model for chart enhancement."""
+    columns: List[ColumnInfo]
+    sample_data: List[List[Any]]
+    chart_type: str  # line/bar/pie
+    current_config: Dict[str, Any]  # Current basic chart config
+
+
+@app.post("/api/enhance-chart")
+async def enhance_chart_endpoint(request: EnhanceChartRequest):
+    """
+    Enhance chart configuration using LLM with smart number formatting.
+    
+    Args:
+        request: EnhanceChartRequest with columns, data, chart type, and current config
+        
+    Returns:
+        Enhanced ECharts configuration with professional formatting
+    """
+    if not agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    logger.info(f"Enhancing {request.chart_type} chart")
+    
+    try:
+        # System prompt with number formatting rules
+        system_prompt = """You are a data visualization expert specializing in Apache ECharts configurations.
+
+Your task is to enhance basic ECharts configurations to make them more professional, readable, and insightful.
+
+Guidelines:
+- Improve titles to be descriptive and meaningful based on the actual data
+- Choose appropriate color palettes that match the data context
+- Format numbers appropriately (currencies, percentages, thousands separators)
+- Add meaningful axis labels and units
+- Optimize tooltip formatting for better readability
+- Adjust chart sizing and spacing for optimal viewing
+- Add subtle styling improvements (shadows, gradients, etc.) where appropriate
+- Keep the chart type unchanged unless there's a strong reason
+- Ensure all returned JSON is valid ECharts option format
+
+## NUMBER FORMATTING
+
+Apply these formatting rules to axis labels, tooltips, and data labels:
+
+### Large Numbers — Use K/M/B Abbreviations:
+- < 1,000: Show as-is (e.g., 850)
+- 1,000 - 999,999: X.XK (e.g., 1.2K, 45.8K, 850K)
+- 1,000,000 - 999,999,999: X.XM (e.g., 1.2M, 45.8M)
+- ≥ 1,000,000,000: X.XB (e.g., 1.2B, 3.5B)
+
+### Decimal Precision:
+- Currency/Money: 0-2 decimals (e.g., $1.2M, $45.80)
+- Percentages: 1 decimal (e.g., 45.5%)
+- Counts/Units: 0 decimals (e.g., 1.2K not 1.23K)
+- Ratios/Rates: 2 decimals (e.g., 3.45)
+
+### Currency Detection:
+If column name contains: price, amount, revenue, sales, cost, profit, total
+→ Add $ prefix: $1.2M, $850K
+
+### Percentage Detection:
+If column name contains: percent, pct, rate, ratio, share
+OR if all values are between 0-100 or 0-1
+→ Add % suffix: 45.5%, 12.3%
+
+### Apply Formatting To:
+1. Y-axis labels (axisLabel.formatter)
+2. Tooltip values  
+3. Data labels on bars/points (if shown)
+
+### ECharts Formatter Implementation:
+Use ECharts template strings for simple cases, or JavaScript formatter functions for complex number formatting.
+
+For axis labels with large numbers, use JavaScript formatter:
+```javascript
+function(value) {
+  if (value >= 1e9) return '$' + (value/1e9).toFixed(1) + 'B';
+  if (value >= 1e6) return '$' + (value/1e6).toFixed(1) + 'M';
+  if (value >= 1e3) return '$' + (value/1e3).toFixed(1) + 'K';
+  return '$' + value.toFixed(0);
+}
+```
+
+For tooltips with formatted numbers, use formatter functions that apply K/M/B abbreviations.
+
+IMPORTANT: When using JavaScript functions in JSON, represent them as strings that will be evaluated by ECharts.
+
+Important constraints:
+- Do NOT change the fundamental data or series structure
+- Return ONLY valid JSON that can be directly used as ECharts option
+- Do NOT include any explanatory text outside the JSON
+- Maintain backward compatibility with ECharts 5.x
+- Formatter functions must be valid JavaScript code as strings"""
+        
+        # User prompt
+        user_prompt = f"""Enhance this {request.chart_type} chart configuration.
+
+Column Information:
+{chr(10).join([f"- {col.name} ({col.type})" for col in request.columns])}
+
+Sample Data (first few rows):
+{json.dumps(request.sample_data[:5], indent=2)}
+
+Current Basic Configuration:
+{json.dumps(request.current_config, indent=2)}
+
+Please return an enhanced ECharts configuration as pure JSON with:
+1. A meaningful, descriptive title based on what the data represents
+2. Smart number formatting with K/M/B abbreviations for large numbers
+3. Automatic currency detection (add $ prefix for price/amount/revenue/sales/cost/profit columns)
+4. Automatic percentage detection (add % suffix for percent/rate/ratio columns or values 0-100)
+5. Better color scheme that fits the data context
+6. Improved axis labels with units if applicable
+7. Enhanced tooltip formatting with properly formatted numbers
+8. Professional styling touches
+9. Ensure title and legend do not overlap
+
+Return ONLY the JSON configuration, no other text."""
+        
+        # Call LLM
+        response = await agent.llm.generate(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,
+            max_tokens=4096
+        )
+        
+        # Parse response
+        config_text = response["content"]
+        logger.info(f"Enhancement LLM response (first 300 chars): {config_text[:300]}")
+        
+        # Extract JSON
+        if "```json" in config_text:
+            config_text = config_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in config_text:
+            config_text = config_text.split("```")[1].split("```")[0].strip()
+        
+        config_text = config_text.strip()
+        if not config_text.startswith("{"):
+            start_idx = config_text.find("{")
+            end_idx = config_text.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                config_text = config_text[start_idx:end_idx+1]
+        
+        enhanced_config = json.loads(config_text)
+        
+        # Validate
+        if not isinstance(enhanced_config, dict):
+            raise ValueError("Enhanced config is not a valid object")
+        
+        logger.info("Chart enhancement successful")
+        
+        return {"enhanced_config": enhanced_config}
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse enhancement response: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="LLM returned invalid JSON"
+        )
+    except Exception as e:
+        logger.error(f"Chart enhancement error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chart enhancement failed: {str(e)}"
         )
 
 
