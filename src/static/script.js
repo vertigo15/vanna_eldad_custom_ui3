@@ -1,5 +1,5 @@
-// Import chart manager
-import { ChartManager } from './chart-feature/chartManager.js';
+// Chart manager will be dynamically imported when needed
+let ChartManager = null;
 
 // Global state
 let currentQuestion = '';
@@ -667,7 +667,13 @@ function clearHistory() {
 }
 
 // Chart Feature Initialization
-function initializeChartFeature(results) {
+async function initializeChartFeature(results) {
+    // Dynamically import ChartManager if not already loaded
+    if (!ChartManager) {
+        const module = await import('./chart-feature/chartManager.js');
+        ChartManager = module.ChartManager;
+    }
+    
     // Dispose previous chart manager if exists
     if (chartManager) {
         chartManager.dispose();
@@ -853,22 +859,24 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Load history on page load
     displayHistory();
+    
+    // Expose functions to global scope for inline onclick/onkeyup handlers
+    // (Required because script is loaded as a module)
+    // Must be inside DOMContentLoaded to ensure functions are defined
+    window.askQuestion = askQuestion;
+    window.fillQuestion = fillQuestion;
+    window.copySql = copySql;
+    window.copyResults = copyResults;
+    window.toggleSql = toggleSql;
+    window.togglePrompt = togglePrompt;
+    window.toggleDescribe = toggleDescribe;
+    window.loadTables = loadTables;
+    window.filterTables = filterTables;
+    window.viewSchema = viewSchema;
+    window.saveToHistory = saveToHistory;
+    window.clearHistory = clearHistory;
+    window.sortTable = sortTable;
+    window.filterResults = filterResults;
+    
+    console.log('[Module] Functions exposed to window:', Object.keys(window).filter(k => ['askQuestion', 'sortTable', 'filterResults'].includes(k)));
 });
-
-// Expose functions to global scope for inline onclick/onkeyup handlers
-// (Required because script is loaded as a module)
-window.askQuestion = askQuestion;
-window.fillQuestion = fillQuestion;
-window.copySql = copySql;
-window.copyResults = copyResults;
-window.toggleSql = toggleSql;
-window.togglePrompt = togglePrompt;
-window.toggleDescribe = toggleDescribe;
-window.exportResults = exportResults;
-window.loadTables = loadTables;
-window.filterTables = filterTables;
-window.viewSchema = viewSchema;
-window.saveToHistory = saveToHistory;
-window.clearHistory = clearHistory;
-window.sortTable = sortTable;
-window.filterResults = filterResults;

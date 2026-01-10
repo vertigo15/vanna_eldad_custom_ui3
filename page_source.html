@@ -1,0 +1,201 @@
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to SQL</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Text to SQL</h1>
+            <p class="subtitle">Ask questions about your data in natural language</p>
+        </header>
+
+        <main>
+            <div class="content-area">
+                <div class="query-section">
+                    <div class="input-group">
+                        <textarea id="question-input" placeholder="Ask a question about your database (e.g., 'Show me total sales by product category')" rows="3"></textarea>
+                        <button id="ask-button" onclick="askQuestion()">
+                            Ask Question
+                        </button>
+                    </div>
+
+                    <div id="loading" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Generating SQL and fetching results...</p>
+                    </div>
+
+                    <div id="error-message" class="error-message" style="display: none;"></div>
+                </div>
+
+                <div id="results-section" class="results-section" style="display: flex;">
+                    <div class="result-card">
+                        <h2>📝 Your Question</h2>
+                        <p id="question-display" class="question-display">What are the top 10 products by sales?</p>
+                    </div>
+
+                    <div class="result-card">
+                        <h2>📊 Results</h2>
+                        
+                        <!-- Chart Toggle -->
+                        <div id="chart-toggle-container" class="chart-toggle-wrapper">
+            <div class="view-toggle-group">
+                <button id="toggle-table-btn" class="view-toggle-btn active" data-view="table">
+                    📊 Table
+                </button>
+                <button id="toggle-chart-btn" class="view-toggle-btn" data-view="chart">
+                    📈 Chart
+                </button>
+            </div>
+        </div>
+                        
+                        <!-- Table View Actions -->
+                        <div class="results-actions">
+                            <button class="export-button" onclick="exportToExcel()" style="display: inline-block;" id="export-btn">
+                                📄 Export to Excel
+                            </button>
+                            <button class="copy-results-button" onclick="copyResults()" style="display: inline-block;" id="copy-results-btn">
+                                📋 Copy to Clipboard
+                            </button>
+                            <button class="describe-button" onclick="toggleDescribe()" style="display: inline-block;" id="describe-btn">
+                                📊 Describe
+                            </button>
+                        </div>
+                        
+                        <!-- Table View -->
+                        <div id="results-display" class="results-display"><div class="table-controls"><input type="text" id="result-filter" class="result-filter-input" placeholder="Filter results..." onkeyup="filterResults()"></div><div id="table-container"><table id="results-table"><thead><tr><th onclick="sortTable(0)" style="cursor: pointer;" title="Click to sort">productkey ▲</th><th onclick="sortTable(1)" style="cursor: pointer;" title="Click to sort">product_name</th><th onclick="sortTable(2)" style="cursor: pointer;" title="Click to sort">total_sales</th></tr></thead><tbody><tr class="data-row"><td>310</td><td>Road-650 Red, 62</td><td>$1,202,298.72</td></tr><tr class="data-row"><td>311</td><td>Road-150 Red, 44</td><td>$1,005,493.87</td></tr><tr class="data-row"><td>312</td><td>Road-150 Red, 48</td><td>$1,205,876.99</td></tr><tr class="data-row"><td>313</td><td>Road-150 Red, 52</td><td>$1,080,637.54</td></tr><tr class="data-row"><td>314</td><td>Road-650 Red, 56</td><td>$1,055,589.65</td></tr><tr class="data-row"><td>353</td><td>Mountain-300 Silver, 38</td><td>$979,035.78</td></tr><tr class="data-row"><td>357</td><td>Mountain-200 Silver, 46</td><td>$930,315.99</td></tr><tr class="data-row"><td>359</td><td>Mountain-300 Black, 38</td><td>$954,715.84</td></tr><tr class="data-row"><td>361</td><td>Mountain-200 Black, 42</td><td>$979,960.73</td></tr><tr class="data-row"><td>363</td><td>Mountain-200 Black, 46</td><td>$961,600.81</td></tr></tbody></table><p style="margin-top: 15px; color: #666; font-size: 0.9rem;" id="row-count">
+        10 rows returned
+    </p></div></div>
+                        
+                        <!-- Describe Statistics Section -->
+                        <div id="describe-section" class="describe-section" style="display: none;"></div>
+                        
+                        <!-- Chart View -->
+                        <div id="chart-view-container" class="chart-view-container" style="display: none;">
+                            <div id="chart-type-selector-container" class="chart-type-selector-container" style="display: none;">
+            <div class="chart-type-selector-wrapper">
+                <label for="chart-type-select" class="chart-type-label">Chart Type:</label>
+                <select id="chart-type-select" class="chart-type-select">
+                    <option value="auto" selected="">🤖 Auto (LLM Recommended)</option><option value="bar">📊 Bar Chart</option><option value="line">📈 Line Chart</option><option value="pie">🥧 Pie Chart</option><option value="area">📉 Area Chart</option><option value="scatter">⚫ Scatter Plot</option><option value="horizontal_bar">📊 Horizontal Bar</option>
+                </select>
+                <div id="chart-type-recommendation" class="chart-type-recommendation" style="display: none;">
+                    <span class="recommendation-icon">💡</span>
+                    <span class="recommendation-text"></span>
+                </div>
+            </div>
+        </div>
+                            <div id="chart-display-container" class="chart-display"></div>
+                        </div>
+                    </div>
+
+                    <!-- Insights Section -->
+                    <div id="insights-container" class="result-card" style="display: block;">
+            <div class="insights-section">
+                <div class="insights-header">
+                    <h3>💡 Insights</h3>
+                </div>
+                
+                <div class="insights-content">
+        
+                <div class="insights-summary">
+                    <strong>Summary:</strong> The top 10 products by sales are tightly clustered, with Road bikes slightly outperforming Mountain bikes in total sales among this group.
+                </div>
+            <div class="insights-findings">
+                <strong>Key Findings:</strong>
+                <ul><li>The single top product by sales is productkey 312 (Road-150 Red, 48) with total_sales of $1,205,876.99, just 0.3% higher than the second product 310 (Road-650 Red, 62) at $1,202,298.72.</li><li>The top 3 products (312 Road-150 Red, 48; 310 Road-650 Red, 62; 313 Road-150 Red, 52) all exceed $1.08M in sales, ranging from $1,080,637.54 to $1,205,876.99.</li><li>Within this top-10 list, Road models (productkeys 312, 310, 313, 314, 311) occupy the top 5 positions, all above $1,005,000 in sales, while Mountain models (361, 353, 363, 359, 357) occupy positions 6–10 with sales between $930,315.99 and $979,960.73.</li></ul></div><div class="insights-suggestions">
+                <strong>Suggestions:</strong>
+                <ul><li>Prioritize inventory, marketing, and cross-sell efforts around the top Road models (productkeys 312, 310, 313, 314, 311), as they currently lead this top-10 list in sales and all generate over $1,000,000 each.</li><li>Review pricing, promotions, and availability for the leading Mountain models (361, 353, 363, 359, 357) to identify opportunities to close the ~2–23% sales gap versus the top Road product (from $930,315.99 up to $1,205,876.99).</li></ul></div></div></div></div>
+
+                    <!-- Data Profiling Section -->
+                    <div id="profiling-section" class="result-card profiling-card" style="display: block;">
+                        <div id="profiling-header" class="profiling-header" onclick="profilingManager.toggle()">
+                            <h2>
+                                <span id="profiling-arrow">▶</span>
+                                📈 Data Profiling Report
+                            </h2>
+                        </div>
+                        <div id="profiling-content" class="profiling-content" style="display: none;">
+                            <!-- Content will be dynamically loaded -->
+                        </div>
+                    </div>
+
+                    <div class="result-card" id="explanation-card" style="display: none;">
+                        <h2>💡 Explanation</h2>
+                        <p id="explanation-display" class="explanation-display"></p>
+                    </div>
+
+                    <div class="result-card">
+                        <h2>💻 Generated SQL</h2>
+                        <button class="toggle-prompt-button" onclick="toggleSql()" id="toggle-sql-btn">
+                            ▼ View SQL
+                        </button>
+                        <div id="sql-content" class="prompt-content" style="display: none;">
+                            <pre id="sql-display" class="sql-display">SELECT p.productkey,
+       p.englishproductname AS product_name,
+       SUM(f.salesamount) AS total_sales
+FROM factinternetsales f
+JOIN dimproduct p ON f.productkey = p.productkey
+GROUP BY p.productkey, p.englishproductname
+ORDER BY total_sales DESC
+LIMIT 10;</pre>
+                            <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                        </div>
+                        
+                        <div class="prompt-section" id="prompt-section" style="display: block;">
+                            <button class="toggle-prompt-button" onclick="togglePrompt()" id="toggle-prompt-btn">
+                                ▼ View Prompt
+                            </button>
+                            <div id="prompt-content" class="prompt-content" style="display: none;">
+                                <h3>System Prompt:</h3>
+                                <pre id="prompt-display" class="prompt-display"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="info-card">
+                    <h3>📚 Available Tables</h3>
+                    <button onclick="loadTables()">Load Tables</button>
+                    <input type="text" id="table-search" class="table-search-input" placeholder="Search tables..." onkeyup="filterTables()" style="display: none;">
+                    <div id="tables-list" class="tables-list"></div>
+                </div>
+
+                <div class="info-card">
+                    <h3>ℹ️ Sample Questions</h3>
+                    <ul class="sample-questions">
+                        <li onclick="fillQuestion('What are the top 10 products by sales?')">
+                            What are the top 10 products by sales?
+                        </li>
+                        <li onclick="fillQuestion('Show me sales trends by month for 2023')">
+                            Show me sales trends by month for 2023
+                        </li>
+                        <li onclick="fillQuestion('Which customers have the highest order totals?')">
+                            Which customers have the highest order totals?
+                        </li>
+                        <li onclick="fillQuestion('What is the average order value by region?')">
+                            What is the average order value by region?
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <h3>🕐 Recent Questions</h3>
+                    <div class="history-controls">
+                        <button onclick="clearHistory()" class="clear-history-btn" style="display: block;" id="clear-history-btn">
+                            Clear History
+                        </button>
+                    </div>
+                    <div id="question-history" class="question-history"><div class="history-item" onclick="fillQuestion('What are the top 10 products by sales?')" title="What are the top 10 products by sales?">What are the top 10 products by sales?</div></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/insights/insightsManager.js"></script>
+    <script src="/static/profiling/profilingManager.js"></script>
+    <script src="/static/script.js?v=11"></script>
+
+</body></html>
