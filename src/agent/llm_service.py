@@ -4,9 +4,12 @@ from openai import AzureOpenAI
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import asyncio
 import json
+import logging
 
 from vanna.core.llm.base import LlmService
 from vanna.core.llm.models import LlmRequest, LlmResponse, LlmMessage, ToolCall
+
+logger = logging.getLogger(__name__)
 
 
 class AzureOpenAILlmService(LlmService):
@@ -202,7 +205,10 @@ class AzureOpenAILlmService(LlmService):
         # Add tools if provided
         if hasattr(request, 'tools') and request.tools:
             # Transform Vanna ToolSchema to Azure OpenAI format
-            params["tools"] = self._transform_tools(request.tools)
+            transformed_tools = self._transform_tools(request.tools)
+            logger.info(f"Transformed {len(transformed_tools)} tools for Azure OpenAI")
+            logger.info(f"First tool: {json.dumps(transformed_tools[0], indent=2) if transformed_tools else 'None'}")
+            params["tools"] = transformed_tools
             params["tool_choice"] = "auto"
         
         # Make synchronous call
