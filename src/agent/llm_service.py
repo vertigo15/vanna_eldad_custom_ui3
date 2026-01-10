@@ -253,6 +253,10 @@ class AzureOpenAILlmService(LlmService):
         Yields:
             LlmResponse chunks
         """
+        logger.info("🔵 stream_request called")
+        logger.info(f"Request object type: {type(request).__name__}")
+        logger.info(f"Request has 'tools' attr: {hasattr(request, 'tools')}")
+        
         # Convert messages
         messages = [
             {"role": msg.role, "content": msg.content}
@@ -271,10 +275,16 @@ class AzureOpenAILlmService(LlmService):
         }
         
         # Add tools if provided
+        logger.info(f"Checking tools: has attr={hasattr(request, 'tools')}, value={getattr(request, 'tools', 'NO ATTR')}")
         if hasattr(request, 'tools') and request.tools:
             # Transform Vanna ToolSchema to Azure OpenAI format
-            params["tools"] = self._transform_tools(request.tools)
+            logger.info(f"✅ Request HAS tools: {len(request.tools)} tools")
+            transformed = self._transform_tools(request.tools)
+            logger.info(f"Transformed first tool: {json.dumps(transformed[0], indent=2) if transformed else 'None'}")
+            params["tools"] = transformed
             params["tool_choice"] = "auto"
+        else:
+            logger.warning(f"⚠️ No tools! request.tools = {getattr(request, 'tools', 'NO ATTR')}")
         
         # Create stream
         stream = await loop.run_in_executor(
