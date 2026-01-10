@@ -122,11 +122,13 @@ async def lifespan(app: FastAPI):
         )
         
         # Create Vanna Agent
+        # Note: agent_memory causes ToolContext validation error
+        # Pass None and tools can access agent_memory directly if needed
         agent = Agent(
             llm_service=llm_service,
             tool_registry=tool_registry,
             user_resolver=user_resolver,
-            agent_memory=agent_memory,  # Required parameter
+            agent_memory=None,  # Bypass ToolContext validation issue
             conversation_store=conversation_store,
             config=agent_config
         )

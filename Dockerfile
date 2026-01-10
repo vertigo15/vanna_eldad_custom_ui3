@@ -19,7 +19,8 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run the application
-# Use Option 3: Full Vanna 2.0 Agent with all tools
-# ChartGenerationTool and InsightsGenerationTool included
-CMD ["uvicorn", "src.main_vanna2_full:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application  
+# Use Option 2: Vanna 2.0 with conversation history
+# Option 3 (main_vanna2_full) has ToolContext validation issues with AgentMemory
+# TODO: Fix PgVectorAgentMemory to properly inherit from vanna.core.memory.AgentMemory
+CMD ["uvicorn", "src.main_vanna2:app", "--host", "0.0.0.0", "--port", "8000"]
