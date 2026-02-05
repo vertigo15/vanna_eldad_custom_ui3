@@ -884,6 +884,212 @@ main {
     border-bottom: none;
 }
 
+/* Statistical Tabs Interface */
+.stats-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 0;
+}
+
+.stats-tab {
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.3s ease;
+    position: relative;
+    bottom: -2px;
+}
+
+.stats-tab:hover {
+    color: #667eea;
+    background: #f8f9fa;
+}
+
+.stats-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    font-weight: 600;
+}
+
+.stats-tab-content-container {
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    min-height: 300px;
+}
+
+.stats-tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.stats-tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Outliers Section */
+.outlier-column-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.outlier-column-section h4 {
+    color: #667eea;
+    margin-bottom: 15px;
+    font-size: 1rem;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 5px;
+}
+
+.outliers-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.outlier-badge {
+    background: #ff6b6b;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.boxplot-container {
+    margin-top: 20px;
+    padding: 10px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+/* Missing Values Section */
+.missing-values-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+.missing-values-table thead {
+    background: #667eea;
+    color: white;
+}
+
+.missing-values-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+}
+
+.missing-values-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.missing-values-table tr:last-child td {
+    border-bottom: none;
+}
+
+.missing-bar-container {
+    width: 150px;
+    height: 20px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.missing-bar {
+    height: 100%;
+    transition: width 0.3s;
+}
+
+.missing-low {
+    background: #28a745;
+}
+
+.missing-medium {
+    background: #ffc107;
+}
+
+.missing-high {
+    background: #dc3545;
+}
+
+/* Correlation Matrix Section */
+.correlation-heatmap {
+    overflow-x: auto;
+}
+
+.correlation-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 0.85rem;
+}
+
+.correlation-table th {
+    padding: 10px;
+    background: #667eea;
+    color: white;
+    font-weight: 600;
+    border: 1px solid #5568d3;
+}
+
+.correlation-header {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    min-width: 40px;
+    max-width: 40px;
+}
+
+.correlation-row-header {
+    text-align: left;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.correlation-cell {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+    font-weight: 500;
+    transition: transform 0.2s;
+    cursor: pointer;
+}
+
+.correlation-cell:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 10;
+    position: relative;
+}
+
 /* Data Profiling Section */
 .profiling-card {
     margin-top: 20px;

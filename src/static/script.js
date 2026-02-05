@@ -732,20 +732,46 @@ function calculateStatistics(results) {
     const rows = results.data || results.rows;
     const columns = results.columns;
     const stats = {};
+    const totalRows = rows.length;
+    
+    // Helper function to parse currency values
+    const parseCurrency = (val) => {
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+            // Remove currency symbols ($, €, £, ¥, etc.) and commas
+            const cleaned = val.replace(/[$€£¥,]/g, '').trim();
+            return parseFloat(cleaned);
+        }
+        return NaN;
+    };
     
     columns.forEach((column, colIndex) => {
+        // Skip columns that start with or end with "key" (case insensitive)
+        const columnLower = column.toLowerCase();
+        if (columnLower.startsWith('key') || columnLower.endsWith('key')) {
+            return; // Skip this column
+        }
+        
         const values = [];
+        const allValues = []; // Include null/undefined for missing value analysis
         
         // Extract column values
         rows.forEach(row => {
             const value = Array.isArray(row) ? row[colIndex] : row[column];
+            allValues.push(value);
             if (value !== null && value !== undefined && value !== '') {
                 values.push(value);
             }
         });
         
-        // Determine if numeric
-        const numericValues = values.filter(v => !isNaN(parseFloat(v))).map(v => parseFloat(v));
+        // Count missing values
+        const missingCount = allValues.filter(v => v === null || v === undefined || v === '').length;
+        const missingPct = (missingCount / totalRows * 100).toFixed(2);
+        
+        // Determine if numeric (including currency values)
+        const numericValues = values
+            .map(v => parseCurrency(v))
+            .filter(v => !isNaN(v));
         const isNumeric = numericValues.length > values.length * 0.5;
         
         if (isNumeric && numericValues.length > 0) {
@@ -765,6 +791,12 @@ function calculateStatistics(results) {
             const q1 = sorted[Math.floor(sorted.length * 0.25)];
             const q3 = sorted[Math.floor(sorted.length * 0.75)];
             
+            // Calculate IQR and outliers
+            const iqr = q3 - q1;
+            const lowerBound = q1 - 1.5 * iqr;
+            const upperBound = q3 + 1.5 * iqr;
+            const outliers = numericValues.filter(v => v < lowerBound || v > upperBound);
+            
             stats[column] = {
                 type: 'numeric',
                 count: numericValues.length,
@@ -774,7 +806,14 @@ function calculateStatistics(results) {
                 q25: q1,
                 median: median,
                 q75: q3,
-                max: sorted[sorted.length - 1]
+                max: sorted[sorted.length - 1],
+                iqr: iqr,
+                lowerBound: lowerBound,
+                upperBound: upperBound,
+                outliers: outliers,
+                sortedValues: sorted,
+                missingCount: missingCount,
+                missingPct: missingPct
             };
         } else {
             // Calculate categorical statistics
@@ -790,7 +829,9 @@ function calculateStatistics(results) {
                 count: values.length,
                 unique: uniqueValues.size,
                 top: topValue ? topValue[0] : null,
-                freq: topValue ? topValue[1] : null
+                freq: topValue ? topValue[1] : null,
+                missingCount: missingCount,
+                missingPct: missingPct
             };
         }
     });
@@ -800,9 +841,22 @@ function calculateStatistics(results) {
 
 // Format statistics as HTML
 function formatStatistics(stats) {
-    let html = '<h3 style="margin-bottom: 15px;">📊 Statistical Summary</h3>';
-    html += '<div class="stats-container">';
+    let html = '<h3 style="margin-bottom: 15px;">📊 Statistical Analysis</h3>';
     
+    // Tab Navigation
+    html += '<div class="stats-tabs">';
+    html += '<button class="stats-tab active" onclick="switchStatsTab(\'summary\')">📊 Summary</button>';
+    html += '<button class="stats-tab" onclick="switchStatsTab(\'outliers\')">🔍 Outliers</button>';
+    html += '<button class="stats-tab" onclick="switchStatsTab(\'missing\')">❓ Missing Values</button>';
+    html += '<button class="stats-tab" onclick="switchStatsTab(\'correlation\')">🔗 Correlation Matrix</button>';
+    html += '</div>';
+    
+    // Tab Content Container
+    html += '<div class="stats-tab-content-container">';
+    
+    // Summary Tab (default visible)
+    html += '<div id="stats-tab-summary" class="stats-tab-content active">';
+    html += '<div class="stats-container">';
     Object.entries(stats).forEach(([column, stat]) => {
         html += '<div class="stat-column">';
         html += `<h4>${escapeHtml(column)}</h4>`;
@@ -826,12 +880,262 @@ function formatStatistics(stats) {
             html += `<tr><td>Freq</td><td>${stat.freq}</td></tr>`;
             html += '</table>';
         }
+        html += '</div>';
+    });
+    html += '</div></div>';
+    
+    // Outliers Tab
+    html += '<div id="stats-tab-outliers" class="stats-tab-content">';
+    html += formatOutliersSection(stats);
+    html += '</div>';
+    
+    // Missing Values Tab
+    html += '<div id="stats-tab-missing" class="stats-tab-content">';
+    html += formatMissingValuesSection(stats);
+    html += '</div>';
+    
+    // Correlation Matrix Tab
+    html += '<div id="stats-tab-correlation" class="stats-tab-content">';
+    html += formatCorrelationSection(stats);
+    html += '</div>';
+    
+    html += '</div>'; // Close tab content container
+    
+    return html;
+}
+
+// Format Outliers Analysis Section
+function formatOutliersSection(stats) {
+    const numericStats = Object.entries(stats).filter(([_, stat]) => stat.type === 'numeric');
+    if (numericStats.length === 0) return '<p style="text-align: center; padding: 40px; color: #999;">No numeric columns available for outlier analysis.</p>';
+    
+    let html = '';
+    
+    numericStats.forEach(([column, stat]) => {
+        html += '<div class="outlier-column-section">';
+        html += `<h4>${escapeHtml(column)}</h4>`;
+        
+        // Quartiles and IQR table
+        html += '<table class="stats-table" style="margin-bottom: 15px;">';
+        html += `<tr><td>Q1 (25%)</td><td>${stat.q25.toFixed(2)}</td></tr>`;
+        html += `<tr><td>Q2 (50% - Median)</td><td>${stat.median.toFixed(2)}</td></tr>`;
+        html += `<tr><td>Q3 (75%)</td><td>${stat.q75.toFixed(2)}</td></tr>`;
+        html += `<tr><td>IQR (Q3-Q1)</td><td>${stat.iqr.toFixed(2)}</td></tr>`;
+        html += `<tr><td>Lower Bound</td><td>${stat.lowerBound.toFixed(2)}</td></tr>`;
+        html += `<tr><td>Upper Bound</td><td>${stat.upperBound.toFixed(2)}</td></tr>`;
+        html += '</table>';
+        
+        // Outliers
+        if (stat.outliers.length > 0) {
+            html += `<p><strong>Outliers Detected: ${stat.outliers.length}</strong></p>`;
+            html += '<div class="outliers-list">';
+            stat.outliers.slice(0, 10).forEach(outlier => {
+                html += `<span class="outlier-badge">${outlier.toFixed(2)}</span>`;
+            });
+            if (stat.outliers.length > 10) {
+                html += `<span class="outlier-badge">+${stat.outliers.length - 10} more</span>`;
+            }
+            html += '</div>';
+        } else {
+            html += '<p style="color: #28a745;">✓ No outliers detected</p>';
+        }
+        
+        // Simple boxplot visualization
+        html += '<div class="boxplot-container">';
+        html += renderBoxplot(stat);
+        html += '</div>';
         
         html += '</div>';
     });
     
+    return html;
+}
+
+// Render simple boxplot
+function renderBoxplot(stat) {
+    const range = stat.max - stat.min;
+    const scale = 100 / range;
+    
+    const minPos = 0;
+    const q1Pos = (stat.q25 - stat.min) * scale;
+    const medianPos = (stat.median - stat.min) * scale;
+    const q3Pos = (stat.q75 - stat.min) * scale;
+    const maxPos = 100;
+    
+    let html = '<div class="boxplot" style="position: relative; height: 60px; margin-top: 10px;">';
+    
+    // Whisker line
+    html += `<div style="position: absolute; top: 29px; left: ${minPos}%; width: ${maxPos - minPos}%; height: 2px; background: #999;"></div>`;
+    
+    // Box
+    html += `<div style="position: absolute; top: 15px; left: ${q1Pos}%; width: ${q3Pos - q1Pos}%; height: 30px; background: #667eea; border: 2px solid #5568d3; border-radius: 4px;"></div>`;
+    
+    // Median line
+    html += `<div style="position: absolute; top: 15px; left: ${medianPos}%; width: 2px; height: 30px; background: #ff6b6b;"></div>`;
+    
+    // Min/Max markers
+    html += `<div style="position: absolute; top: 25px; left: ${minPos}%; width: 2px; height: 10px; background: #999;"></div>`;
+    html += `<div style="position: absolute; top: 25px; left: ${maxPos}%; width: 2px; height: 10px; background: #999;"></div>`;
+    
+    // Labels
+    html += `<div style="position: absolute; top: 45px; left: ${minPos}%; font-size: 0.7rem; color: #666;">${stat.min.toFixed(1)}</div>`;
+    html += `<div style="position: absolute; top: 45px; left: ${medianPos}%; font-size: 0.7rem; color: #666; transform: translateX(-50%);">${stat.median.toFixed(1)}</div>`;
+    html += `<div style="position: absolute; top: 45px; right: ${100 - maxPos}%; font-size: 0.7rem; color: #666;">${stat.max.toFixed(1)}</div>`;
+    
     html += '</div>';
     return html;
+}
+
+// Format Missing Values Analysis Section
+function formatMissingValuesSection(stats) {
+    let html = '';
+    
+    // Filter columns with missing values
+    const columnsWithMissing = Object.entries(stats).filter(([_, stat]) => stat.missingCount > 0);
+    
+    if (columnsWithMissing.length === 0) {
+        html += '<p style="color: #28a745; text-align: center; padding: 20px;">✓ No missing values detected in any column</p>';
+    } else {
+        html += '<table class="missing-values-table">';
+        html += '<thead><tr><th>Column</th><th>Missing Count</th><th>Missing %</th><th>Visual</th></tr></thead>';
+        html += '<tbody>';
+        
+        columnsWithMissing.forEach(([column, stat]) => {
+            const severity = stat.missingPct < 5 ? 'low' : stat.missingPct < 20 ? 'medium' : 'high';
+            html += '<tr>';
+            html += `<td><strong>${escapeHtml(column)}</strong></td>`;
+            html += `<td>${stat.missingCount}</td>`;
+            html += `<td>${stat.missingPct}%</td>`;
+            html += '<td>';
+            html += `<div class="missing-bar-container">`;
+            html += `<div class="missing-bar missing-${severity}" style="width: ${stat.missingPct}%"></div>`;
+            html += `</div>`;
+            html += '</td>';
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+    }
+    
+    return html;
+}
+
+// Format Correlation Matrix Section
+function formatCorrelationSection(stats) {
+    const numericColumns = Object.entries(stats).filter(([_, stat]) => stat.type === 'numeric');
+    if (numericColumns.length < 2) return '<p style="text-align: center; padding: 40px; color: #999;">Need at least 2 numeric columns for correlation analysis.</p>';
+    
+    let html = '';
+    
+    // Calculate correlation matrix
+    const correlations = calculateCorrelationMatrix(numericColumns);
+    
+    // Render heatmap
+    html += '<div class="correlation-heatmap">';
+    html += '<table class="correlation-table">';
+    
+    // Header row
+    html += '<thead><tr><th></th>';
+    numericColumns.forEach(([column]) => {
+        html += `<th class="correlation-header">${escapeHtml(column)}</th>`;
+    });
+    html += '</tr></thead>';
+    
+    // Data rows
+    html += '<tbody>';
+    numericColumns.forEach(([rowColumn], rowIdx) => {
+        html += '<tr>';
+        html += `<th class="correlation-row-header">${escapeHtml(rowColumn)}</th>`;
+        numericColumns.forEach(([colColumn], colIdx) => {
+            const corr = correlations[rowIdx][colIdx];
+            const color = getCorrelationColor(corr);
+            html += `<td class="correlation-cell" style="background-color: ${color};" title="${corr.toFixed(3)}">`;
+            html += corr.toFixed(2);
+            html += '</td>';
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '</div>';
+    
+    return html;
+}
+
+// Calculate correlation matrix
+function calculateCorrelationMatrix(numericColumns) {
+    const n = numericColumns.length;
+    const correlations = Array(n).fill(0).map(() => Array(n).fill(0));
+    
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            if (i === j) {
+                correlations[i][j] = 1.0;
+            } else {
+                const [, stat1] = numericColumns[i];
+                const [, stat2] = numericColumns[j];
+                correlations[i][j] = calculateCorrelation(stat1.sortedValues, stat2.sortedValues);
+            }
+        }
+    }
+    
+    return correlations;
+}
+
+// Calculate Pearson correlation coefficient
+function calculateCorrelation(values1, values2) {
+    const n = Math.min(values1.length, values2.length);
+    if (n === 0) return 0;
+    
+    const mean1 = values1.reduce((a, b) => a + b, 0) / values1.length;
+    const mean2 = values2.reduce((a, b) => a + b, 0) / values2.length;
+    
+    let numerator = 0;
+    let sum1 = 0;
+    let sum2 = 0;
+    
+    for (let i = 0; i < n; i++) {
+        const diff1 = values1[i] - mean1;
+        const diff2 = values2[i] - mean2;
+        numerator += diff1 * diff2;
+        sum1 += diff1 * diff1;
+        sum2 += diff2 * diff2;
+    }
+    
+    const denominator = Math.sqrt(sum1 * sum2);
+    return denominator === 0 ? 0 : numerator / denominator;
+}
+
+// Get color for correlation value
+function getCorrelationColor(corr) {
+    if (corr >= 0.7) return 'rgba(40, 167, 69, ' + (0.3 + corr * 0.7) + ')';
+    if (corr >= 0.3) return 'rgba(40, 167, 69, ' + (corr * 0.5) + ')';
+    if (corr >= -0.3) return 'rgba(200, 200, 200, 0.3)';
+    if (corr >= -0.7) return 'rgba(220, 53, 69, ' + (-corr * 0.5) + ')';
+    return 'rgba(220, 53, 69, ' + (0.3 + -corr * 0.7) + ')';
+}
+
+// Switch between stats tabs
+function switchStatsTab(tabName) {
+    // Hide all tab contents
+    const allTabContents = document.querySelectorAll('.stats-tab-content');
+    allTabContents.forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Remove active class from all tabs
+    const allTabs = document.querySelectorAll('.stats-tab');
+    allTabs.forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    const selectedContent = document.getElementById(`stats-tab-${tabName}`);
+    if (selectedContent) {
+        selectedContent.classList.add('active');
+    }
+    
+    // Add active class to clicked tab
+    event.target.classList.add('active');
 }
 
 // Make functions globally accessible for onclick handlers
@@ -846,6 +1150,7 @@ window.filterTables = filterTables;
 window.fillQuestion = fillQuestion;
 window.clearHistory = clearHistory;
 window.toggleDescribe = toggleDescribe;
+window.switchStatsTab = switchStatsTab;
 
 // Enter key to submit
 document.addEventListener('DOMContentLoaded', () => {
@@ -870,6 +1175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.toggleSql = toggleSql;
     window.togglePrompt = togglePrompt;
     window.toggleDescribe = toggleDescribe;
+    window.switchStatsTab = switchStatsTab;
     window.loadTables = loadTables;
     window.filterTables = filterTables;
     window.viewSchema = viewSchema;

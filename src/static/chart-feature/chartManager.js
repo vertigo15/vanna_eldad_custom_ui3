@@ -139,6 +139,14 @@ export class ChartManager {
     async handleChartTypeChange(chartType) {
         console.log('[ChartManager] Chart type changed to:', chartType);
         
+        // Clear cache for this chart type to force regeneration
+        const cacheKey = this.getLLMCacheKey(chartType);
+        sessionStorage.removeItem(cacheKey);
+        console.log('[ChartManager] Cleared cache for:', chartType);
+        
+        // Show visual feedback
+        this.showToast(`Generating ${chartType === 'auto' ? 'LLM-recommended' : chartType} chart...`, 'info');
+        
         // Regenerate chart with new type
         await this.generateChartWithLLM(chartType);
     }
@@ -222,13 +230,15 @@ export class ChartManager {
             }
             
             console.log('[ChartManager] LLM response received');
-            console.log('[ChartManager] Chart type:', data.chart_type);
+            console.log('[ChartManager] Requested type:', chartType, '| Generated type:', data.chart_type);
             
             // Store LLM recommendation (when chart_type is auto)
             if (chartType === 'auto' && data.chart_type) {
                 this.llmRecommendedType = data.chart_type;
                 this.chartTypeSelector.setRecommendation(data.chart_type);
                 console.log('[ChartManager] LLM recommended type:', data.chart_type);
+            } else if (chartType !== 'auto') {
+                console.log('[ChartManager] User-requested type:', chartType);
             }
             
             // Cache the response
