@@ -1,14 +1,15 @@
 /**
  * Data Profiling Manager
- * Handles lazy loading and caching of ydata-profiling reports
+ * Handles lazy loading and caching of ydata-profiling and Sweetviz reports
  */
 
 class ProfilingManager {
     constructor() {
-        this.cachedReport = null;
+        this.cachedReports = {};  // Cache per report type: { ydata: html, sweetviz: html }
         this.currentQueryId = null;
         this.isExpanded = false;
         this.isGenerating = false;
+        this.selectedReportType = 'ydata';  // Default to ydata-profiling
     }
 
     /**
@@ -24,7 +25,7 @@ class ProfilingManager {
 
         // Clear cache if this is a new query
         if (this.currentQueryId !== queryId) {
-            this.cachedReport = null;
+            this.cachedReports = {};
             this.currentQueryId = queryId;
             this.isExpanded = false;
         }
@@ -89,13 +90,13 @@ class ProfilingManager {
         if (arrow) arrow.textContent = '▼';
         if (content) content.style.display = 'block';
 
-        // If report is cached, display it
-        if (this.cachedReport) {
-            this.displayReport(this.cachedReport);
+        // If report is cached for selected type, display it
+        if (this.cachedReports[this.selectedReportType]) {
+            this.displayReport(this.cachedReports[this.selectedReportType]);
             return;
         }
 
-        // Otherwise, show generate button
+        // Otherwise, show generate button with library selector
         this.showGenerateButton();
     }
 
@@ -113,7 +114,7 @@ class ProfilingManager {
     }
 
     /**
-     * Show generate button in content area
+     * Show generate button in content area with library selector
      */
     showGenerateButton() {
         const content = document.getElementById('profiling-content');
@@ -129,11 +130,46 @@ class ProfilingManager {
                     <li>Missing values analysis</li>
                     <li>Common values and outliers</li>
                 </ul>
+                
+                <div class="profiling-library-selector">
+                    <label class="library-option">
+                        <input type="radio" name="profiling-library" value="ydata" 
+                            ${this.selectedReportType === 'ydata' ? 'checked' : ''}
+                            onchange="profilingManager.setReportType('ydata')">
+                        <span class="library-label">
+                            <strong>YData Profiling</strong>
+                            <small>Detailed statistical analysis with correlations</small>
+                        </span>
+                    </label>
+                    <label class="library-option">
+                        <input type="radio" name="profiling-library" value="sweetviz" 
+                            ${this.selectedReportType === 'sweetviz' ? 'checked' : ''}
+                            onchange="profilingManager.setReportType('sweetviz')">
+                        <span class="library-label">
+                            <strong>Sweetviz</strong>
+                            <small>Visual EDA with feature analysis</small>
+                        </span>
+                    </label>
+                </div>
+                
                 <button class="profile-generate-btn" onclick="profilingManager.generateReport()">
                     🔍 Generate Profile Report
                 </button>
             </div>
         `;
+    }
+
+    /**
+     * Set the selected report type
+     * @param {string} reportType - 'ydata' or 'sweetviz'
+     */
+    setReportType(reportType) {
+        this.selectedReportType = reportType;
+        
+        // If we have a cached report for this type, display it
+        if (this.cachedReports[reportType] && this.isExpanded) {
+            this.displayReport(this.cachedReports[reportType]);
+        }
     }
 
     /**
@@ -146,12 +182,14 @@ class ProfilingManager {
         const content = document.getElementById('profiling-content');
         if (!content) return;
 
+        const reportTypeName = this.selectedReportType === 'sweetviz' ? 'Sweetviz' : 'YData Profiling';
+
         try {
             // Show loading state
             content.innerHTML = `
                 <div class="profiling-loading">
                     <div class="spinner"></div>
-                    <p>Generating profile report... This may take a moment.</p>
+                    <p>Generating ${reportTypeName} report... This may take a moment.</p>
                 </div>
             `;
 
@@ -161,19 +199,22 @@ class ProfilingManager {
                 throw new Error('No results available to profile');
             }
 
-            // Prepare dataset
+            // Prepare dataset with report type
             const dataset = {
                 rows: results.rows,
                 columns: results.columns
             };
 
-            // Call API
+            // Call API with report type
             const response = await fetch('/api/generate-profile', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ dataset })
+                body: JSON.stringify({ 
+                    dataset,
+                    report_type: this.selectedReportType
+                })
             });
 
             if (!response.ok) {
@@ -184,8 +225,8 @@ class ProfilingManager {
             const data = await response.json();
             const htmlReport = data.html;
 
-            // Cache the report
-            this.cachedReport = htmlReport;
+            // Cache the report for this type
+            this.cachedReports[this.selectedReportType] = htmlReport;
 
             // Display the report
             this.displayReport(htmlReport);
@@ -194,7 +235,7 @@ class ProfilingManager {
             console.error('Profile generation error:', error);
             content.innerHTML = `
                 <div class="profiling-error">
-                    <p>❌ Failed to generate profile report</p>
+                    <p>❌ Failed to generate ${reportTypeName} report</p>
                     <p class="error-detail">${error.message}</p>
                     <button class="profile-retry-btn" onclick="profilingManager.generateReport()">
                         🔄 Retry
@@ -214,9 +255,19 @@ class ProfilingManager {
         const content = document.getElementById('profiling-content');
         if (!content) return;
 
+        const reportTypeName = this.selectedReportType === 'sweetviz' ? 'Sweetviz' : 'YData Profiling';
+        const otherType = this.selectedReportType === 'sweetviz' ? 'ydata' : 'sweetviz';
+        const otherTypeName = otherType === 'sweetviz' ? 'Sweetviz' : 'YData Profiling';
+
         content.innerHTML = `
             <div class="profiling-report">
                 <div class="profiling-actions">
+                    <div class="profiling-report-info">
+                        <span class="report-type-badge">${reportTypeName}</span>
+                        <button class="profile-switch-btn" onclick="profilingManager.switchReportType('${otherType}')">
+                            🔄 Switch to ${otherTypeName}
+                        </button>
+                    </div>
                     <button class="profile-download-btn" onclick="profilingManager.downloadReport()">
                         📥 Download Full Report
                     </button>
@@ -232,16 +283,33 @@ class ProfilingManager {
     }
 
     /**
+     * Switch to a different report type
+     * @param {string} reportType - 'ydata' or 'sweetviz'
+     */
+    switchReportType(reportType) {
+        this.selectedReportType = reportType;
+        
+        // If cached, display it; otherwise generate new report
+        if (this.cachedReports[reportType]) {
+            this.displayReport(this.cachedReports[reportType]);
+        } else {
+            this.generateReport();
+        }
+    }
+
+    /**
      * Download cached report as HTML file
      */
     downloadReport() {
-        if (!this.cachedReport) return;
+        const cachedReport = this.cachedReports[this.selectedReportType];
+        if (!cachedReport) return;
 
-        const blob = new Blob([this.cachedReport], { type: 'text/html' });
+        const reportTypeSuffix = this.selectedReportType === 'sweetviz' ? 'sweetviz' : 'ydata';
+        const blob = new Blob([cachedReport], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `data_profile_report_${Date.now()}.html`;
+        a.download = `data_profile_${reportTypeSuffix}_${Date.now()}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -274,10 +342,11 @@ class ProfilingManager {
      * Reset manager state
      */
     reset() {
-        this.cachedReport = null;
+        this.cachedReports = {};
         this.currentQueryId = null;
         this.isExpanded = false;
         this.isGenerating = false;
+        this.selectedReportType = 'ydata';
         this.hide();
     }
 }

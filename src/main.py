@@ -302,29 +302,34 @@ async def generate_insights_endpoint(request: GenerateInsightsRequest):
 class GenerateProfileRequest(BaseModel):
     """Request model for data profiling."""
     dataset: Dict[str, Any]  # Query results with 'rows' and 'columns'
+    report_type: str = "ydata"  # 'ydata' or 'sweetviz'
 
 
 @app.post("/api/generate-profile")
 async def generate_profile_endpoint(request: GenerateProfileRequest):
     """
-    Generate a comprehensive data profile report using ydata-profiling.
+    Generate a comprehensive data profile report using ydata-profiling or Sweetviz.
     
     Args:
-        request: GenerateProfileRequest with dataset (rows and columns)
+        request: GenerateProfileRequest with dataset (rows and columns) and report_type
         
     Returns:
         HTML string containing the full profile report
     """
-    logger.info("Generating data profile report")
+    report_type = request.report_type.lower()
+    logger.info(f"Generating data profile report using: {report_type}")
     
     try:
-        # Import profiling service
-        from src.agent.profiling_service import generate_profile_report
+        if report_type == "sweetviz":
+            # Import Sweetviz service
+            from src.agent.sweetviz_service import generate_sweetviz_report
+            html_report = await generate_sweetviz_report(request.dataset)
+        else:
+            # Default to ydata-profiling
+            from src.agent.profiling_service import generate_profile_report
+            html_report = await generate_profile_report(request.dataset)
         
-        # Generate profile report (async call)
-        html_report = await generate_profile_report(request.dataset)
-        
-        logger.info(f"Profile report generated: {len(html_report)} bytes")
+        logger.info(f"Profile report generated ({report_type}): {len(html_report)} bytes")
         
         return {"html": html_report}
         

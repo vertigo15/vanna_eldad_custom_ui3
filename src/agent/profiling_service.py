@@ -5,6 +5,8 @@ from typing import Dict, Any, List
 import pandas as pd
 from ydata_profiling import ProfileReport
 
+from src.agent.profiling_utils import preprocess_dataset
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,8 +35,8 @@ async def generate_profile_report(dataset: Dict[str, Any]) -> str:
         if not rows or not columns:
             raise ValueError("Dataset is empty")
         
-        # Convert to pandas DataFrame
-        df = pd.DataFrame(rows, columns=columns)
+        # Preprocess dataset (remove currency signs, combine date columns)
+        df, original_columns = preprocess_dataset(dataset)
         
         logger.info(f"Generating profile report for dataset: {len(df)} rows, {len(df.columns)} columns")
         

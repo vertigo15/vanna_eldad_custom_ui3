@@ -24,4 +24,6 @@ pgvector>=0.2.0
 
 # Data profiling
 ydata-profiling>=4.0.0
+sweetviz>=2.0.0
 pandas>=2.0.0
+numpy<2.0.0  # Required for sweetviz compatibility

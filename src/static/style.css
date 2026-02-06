@@ -1167,6 +1167,91 @@ main {
     background: #5568d3;
 }
 
+/* Profiling Library Selector */
+.profiling-library-selector {
+    display: flex;
+    gap: 15px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.library-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex: 1;
+    min-width: 200px;
+}
+
+.library-option:hover {
+    border-color: #667eea;
+    background: #f0f2ff;
+}
+
+.library-option input[type="radio"] {
+    margin-top: 3px;
+    accent-color: #667eea;
+}
+
+.library-option input[type="radio"]:checked + .library-label strong {
+    color: #667eea;
+}
+
+.library-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.library-label strong {
+    color: #333;
+    font-size: 1rem;
+}
+
+.library-label small {
+    color: #666;
+    font-size: 0.85rem;
+}
+
+/* Profiling Report Info Bar */
+.profiling-report-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.report-type-badge {
+    padding: 4px 12px;
+    background: #667eea;
+    color: white;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.profile-switch-btn {
+    padding: 6px 14px;
+    background: transparent;
+    color: #667eea;
+    border: 1px solid #667eea;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.profile-switch-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
 /* Profiling Loading */
 .profiling-loading {
     text-align: center;
@@ -1239,7 +1324,9 @@ main {
     background: #f8f9fa;
     border-bottom: 1px solid #e0e0e0;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
 }
 
 .profile-download-btn {

@@ -212,7 +212,7 @@ export class ChartManager {
                     all_data: allData,
                     chart_type: chartType // Include chart type parameter
                 }),
-                signal: AbortSignal.timeout(30000)
+                signal: AbortSignal.timeout(120000) // 2 minute timeout
             });
             
             if (!response.ok) {

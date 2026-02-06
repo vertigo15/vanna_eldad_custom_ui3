@@ -35,6 +35,15 @@ export class ChartContainer {
             throw new Error('ECharts library not loaded');
         }
         
+        // Dispose existing instance if any
+        if (this.chartInstance) {
+            this.chartInstance.dispose();
+            this.chartInstance = null;
+        }
+        
+        // Clear any existing content (e.g., loading spinner)
+        container.innerHTML = '';
+        
         // Initialize chart instance
         this.chartInstance = echarts.init(container);
         console.log('[ChartContainer] ECharts instance initialized');

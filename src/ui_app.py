@@ -202,10 +202,11 @@ def generate_insights_endpoint():
 @app.route('/api/generate-profile', methods=['POST'])
 def generate_profile_endpoint():
     """
-    Generate data profiling report using ydata-profiling.
+    Generate data profiling report using ydata-profiling or Sweetviz.
     
     Request:
         dataset: Query results (dict with 'rows' and 'columns')
+        report_type: 'ydata' or 'sweetviz' (default: 'ydata')
     
     Returns:
         html: HTML string containing the full profile report
@@ -216,7 +217,8 @@ def generate_profile_endpoint():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
-        logger.info('Generating data profile report...')
+        report_type = data.get('report_type', 'ydata')
+        logger.info(f'Generating data profile report using: {report_type}')
         
         # Forward to the main API backend for profiling
         response = requests.post(
