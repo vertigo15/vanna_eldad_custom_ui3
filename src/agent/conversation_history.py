@@ -393,3 +393,138 @@ class ConversationHistoryService:
         except Exception as e:
             logger.error(f"❌ Failed to get conversation history: {e}")
             return {"session_id": session_id, "query_count": 0, "queries": []}
+    
+    async def get_user_recent_questions(
+        self,
+        user_id: str,
+        limit: int = 15
+    ) -> List[str]:
+        """
+        Get recent distinct questions for a user, excluding pinned questions.
+        
+        Args:
+            user_id: User identifier
+            limit: Maximum number of questions to return
+            
+        Returns:
+            List of recent distinct questions (excluding pinned ones)
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT natural_language_query, MAX(created_at) as last_asked
+                    FROM txt2sql_conversation_sessions
+                    WHERE user_id = $1
+                    AND natural_language_query NOT IN (
+                        SELECT question FROM user_pinned_questions WHERE user_id = $1
+                    )
+                    GROUP BY natural_language_query
+                    ORDER BY last_asked DESC
+                    LIMIT $2
+                    """,
+                    user_id,
+                    limit
+                )
+                
+                return [row['natural_language_query'] for row in rows]
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to get user recent questions: {e}")
+            return []
+    
+    async def get_user_pinned_questions(
+        self,
+        user_id: str
+    ) -> List[str]:
+        """
+        Get pinned questions for a user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            List of pinned questions ordered by pin time (newest first)
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT question
+                    FROM user_pinned_questions
+                    WHERE user_id = $1
+                    ORDER BY pinned_at DESC
+                    """,
+                    user_id
+                )
+                
+                return [row['question'] for row in rows]
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to get pinned questions: {e}")
+            return []
+    
+    async def pin_question(
+        self,
+        user_id: str,
+        question: str
+    ) -> bool:
+        """
+        Pin a question for a user.
+        
+        Args:
+            user_id: User identifier
+            question: Question text to pin
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO user_pinned_questions (user_id, question)
+                    VALUES ($1, $2)
+                    ON CONFLICT (user_id, question) DO NOTHING
+                    """,
+                    user_id,
+                    question
+                )
+                logger.info(f"📌 Pinned question for user {user_id}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to pin question: {e}")
+            return False
+    
+    async def unpin_question(
+        self,
+        user_id: str,
+        question: str
+    ) -> bool:
+        """
+        Unpin a question for a user.
+        
+        Args:
+            user_id: User identifier
+            question: Question text to unpin
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    DELETE FROM user_pinned_questions
+                    WHERE user_id = $1 AND question = $2
+                    """,
+                    user_id,
+                    question
+                )
+                logger.info(f"📍 Unpinned question for user {user_id}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to unpin question: {e}")
+            return False

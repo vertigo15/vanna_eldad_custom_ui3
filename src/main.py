@@ -78,7 +78,7 @@ class QueryResponse(BaseModel):
     sql: Optional[str]
     results: Optional[Dict[str, Any]]
     explanation: Optional[str]
-    prompt: Optional[str] = None
+    prompt: Optional[Dict[str, Any]] = None  # Can be string or structured dict
     error: Optional[str]
 
 
@@ -101,6 +101,8 @@ class GenerateChartResponse(BaseModel):
     """Response model for chart generation."""
     chart_config: Dict[str, Any]  # Complete ECharts configuration
     chart_type: str  # Type chosen by LLM: "line", "bar", "pie", etc.
+    prompt: Optional[str] = None  # The user prompt used for generation
+    system_message: Optional[str] = None  # The system message used for generation
 
 
 @app.get("/")
@@ -197,6 +199,74 @@ async def get_table_schema(table_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/user/recent-questions")
+async def get_user_recent_questions(user_id: str = "default", limit: int = 15):
+    """Get recent distinct questions for a user from conversation history."""
+    if not agent or not agent.history:
+        raise HTTPException(status_code=503, detail="History service not available")
+    
+    try:
+        questions = await agent.history.get_user_recent_questions(user_id, limit)
+        return {"questions": questions}
+    except Exception as e:
+        logger.error(f"Error fetching recent questions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/pinned-questions")
+async def get_user_pinned_questions(user_id: str = "default"):
+    """Get pinned questions for a user."""
+    if not agent or not agent.history:
+        raise HTTPException(status_code=503, detail="History service not available")
+    
+    try:
+        questions = await agent.history.get_user_pinned_questions(user_id)
+        return {"questions": questions}
+    except Exception as e:
+        logger.error(f"Error fetching pinned questions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PinQuestionRequest(BaseModel):
+    """Request model for pinning a question."""
+    user_id: str = "default"
+    question: str
+
+
+@app.post("/api/user/pin-question")
+async def pin_question(request: PinQuestionRequest):
+    """Pin a question for a user."""
+    if not agent or not agent.history:
+        raise HTTPException(status_code=503, detail="History service not available")
+    
+    try:
+        success = await agent.history.pin_question(request.user_id, request.question)
+        if success:
+            return {"success": True, "message": "Question pinned"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to pin question")
+    except Exception as e:
+        logger.error(f"Error pinning question: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/user/unpin-question")
+async def unpin_question(request: PinQuestionRequest):
+    """Unpin a question for a user."""
+    if not agent or not agent.history:
+        raise HTTPException(status_code=503, detail="History service not available")
+    
+    try:
+        success = await agent.history.unpin_question(request.user_id, request.question)
+        if success:
+            return {"success": True, "message": "Question unpinned"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to unpin question")
+    except Exception as e:
+        logger.error(f"Error unpinning question: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class GenerateInsightsRequest(BaseModel):
     """Request model for insights generation."""
     dataset: Dict[str, Any]  # Query results with 'rows' and 'columns'
@@ -209,6 +279,8 @@ class GenerateInsightsResponse(BaseModel):
     summary: str
     findings: List[str]
     suggestions: List[str]
+    prompt: Optional[str] = None  # The prompt used for generation
+    system_message: Optional[str] = None  # The system message used
 
 
 @app.post("/api/generate-insights", response_model=GenerateInsightsResponse)
@@ -286,7 +358,9 @@ async def generate_insights_endpoint(request: GenerateInsightsRequest):
         return GenerateInsightsResponse(
             summary=insights.get("summary", "Analysis complete"),
             findings=insights.get("findings", []),
-            suggestions=insights.get("suggestions", [])
+            suggestions=insights.get("suggestions", []),
+            prompt=insights.get("prompt"),
+            system_message=insights.get("system_message")
         )
         
     except Exception as e:
@@ -768,7 +842,9 @@ Return ONLY the ECharts configuration JSON. No explanatory text."""
         
         return GenerateChartResponse(
             chart_config=chart_config,
-            chart_type=chart_type
+            chart_type=chart_type,
+            prompt=user_prompt,
+            system_message=system_prompt
         )
         
     except json.JSONDecodeError as e:

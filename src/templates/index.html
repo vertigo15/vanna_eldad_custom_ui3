@@ -95,22 +95,51 @@
                     </div>
 
                     <div class="result-card">
-                        <h2>💻 Generated SQL</h2>
-                        <button class="toggle-prompt-button" onclick="toggleSql()" id="toggle-sql-btn">
-                            ▼ View SQL
-                        </button>
-                        <div id="sql-content" class="prompt-content" style="display: none;">
-                            <pre id="sql-display" class="sql-display"></pre>
-                            <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                        <h2>💻 Prompts & SQL</h2>
+                        
+                        <!-- Tab Navigation -->
+                        <div class="prompt-tabs">
+                            <button class="prompt-tab active" onclick="switchPromptTab('sql')" id="tab-sql">
+                                💻 Generated SQL
+                            </button>
+                            <button class="prompt-tab" onclick="switchPromptTab('query')" id="tab-query">
+                                🧠 Query Prompt
+                            </button>
+                            <button class="prompt-tab" onclick="switchPromptTab('insights')" id="tab-insights">
+                                💡 Insights Prompt
+                            </button>
+                            <button class="prompt-tab" onclick="switchPromptTab('chart')" id="tab-chart">
+                                📊 Chart Prompt
+                            </button>
                         </div>
                         
-                        <div class="prompt-section" id="prompt-section" style="display: none;">
-                            <button class="toggle-prompt-button" onclick="togglePrompt()" id="toggle-prompt-btn">
-                                ▼ View Prompt
-                            </button>
-                            <div id="prompt-content" class="prompt-content" style="display: none;">
-                                <h3>System Prompt:</h3>
-                                <pre id="prompt-display" class="prompt-display"></pre>
+                        <!-- Tab Contents -->
+                        <div class="prompt-tab-content" style="display: none;">
+                            <!-- Generated SQL Tab -->
+                            <div id="content-sql" class="tab-pane active">
+                                <div class="sql-content">
+                                    <pre id="sql-display" class="sql-display"></pre>
+                                    <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Query Prompt Tab -->
+                            <div id="content-query" class="tab-pane" style="display: none;">
+                                <div id="prompt-content" class="prompt-content"></div>
+                            </div>
+                            
+                            <!-- Insights Prompt Tab -->
+                            <div id="content-insights" class="tab-pane" style="display: none;">
+                                <div id="insights-prompt-content" class="prompt-content">
+                                    <p style="color: #999;">Insights prompt will be shown here when insights are generated</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Chart Prompt Tab -->
+                            <div id="content-chart" class="tab-pane" style="display: none;">
+                                <div id="chart-prompt-content" class="prompt-content">
+                                    <p style="color: #999;">Chart prompt will be shown here when a chart is generated</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -130,24 +159,6 @@
                         style="display: none;"
                     />
                     <div id="tables-list" class="tables-list"></div>
-                </div>
-
-                <div class="info-card">
-                    <h3>ℹ️ Sample Questions</h3>
-                    <ul class="sample-questions">
-                        <li onclick="fillQuestion('What are the top 10 products by sales?')">
-                            What are the top 10 products by sales?
-                        </li>
-                        <li onclick="fillQuestion('Show me sales trends by month for 2023')">
-                            Show me sales trends by month for 2023
-                        </li>
-                        <li onclick="fillQuestion('Which customers have the highest order totals?')">
-                            Which customers have the highest order totals?
-                        </li>
-                        <li onclick="fillQuestion('What is the average order value by region?')">
-                            What is the average order value by region?
-                        </li>
-                    </ul>
                 </div>
 
                 <div class="info-card">

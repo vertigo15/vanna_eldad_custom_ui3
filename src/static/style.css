@@ -329,19 +329,48 @@ main {
     background: #f8f9fa;
     border-radius: 6px;
     margin-bottom: 8px;
-    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     transition: all 0.2s;
     font-size: 0.9rem;
     color: #555;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .history-item:hover {
     background: #667eea;
     color: white;
     transform: translateX(5px);
+}
+
+.history-item.pinned-item {
+    background: #fff3cd;
+    border-left: 3px solid #ffc107;
+}
+
+.history-item.pinned-item:hover {
+    background: #ffe69c;
+    color: #333;
+}
+
+.pin-icon {
+    font-size: 1rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 2px;
+    transition: transform 0.2s;
+}
+
+.pin-icon:hover {
+    transform: scale(1.2);
+}
+
+.question-text {
+    flex: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .history-controls {
@@ -453,6 +482,182 @@ main {
     margin: 0;
     white-space: pre-wrap;
     word-wrap: break-word;
+}
+
+/* Structured Prompt Sections */
+.structured-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.prompt-section {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: white;
+    overflow: hidden;
+}
+
+.prompt-section-header {
+    padding: 12px 15px;
+    background: #f8f9fa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    color: #333;
+    transition: background 0.2s;
+    user-select: none;
+}
+
+.prompt-section-header:hover {
+    background: #e9ecef;
+}
+
+.section-arrow {
+    color: #667eea;
+    font-size: 0.8rem;
+    width: 15px;
+    display: inline-block;
+}
+
+.section-title {
+    flex: 1;
+    font-size: 0.95rem;
+}
+
+.prompt-section-content {
+    padding: 15px;
+    background: white;
+    border-top: 1px solid #dee2e6;
+}
+
+.prompt-text {
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 12px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.sql-example {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #667eea;
+}
+
+.example-question {
+    margin-bottom: 8px;
+    color: #555;
+}
+
+.example-sql pre {
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 5px 0 0 0;
+    overflow-x: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
+.documentation-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.documentation-list li {
+    margin-bottom: 8px;
+    color: #555;
+    line-height: 1.6;
+}
+
+.conversation-item {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #fff3cd;
+    border-radius: 4px;
+    border-left: 3px solid #ffc107;
+}
+
+.conv-question {
+    margin-bottom: 8px;
+    color: #856404;
+}
+
+.conv-sql pre {
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 5px 0 0 0;
+    overflow-x: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
+.current-question-text {
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #667eea;
+    padding: 10px;
+    background: #f0f3ff;
+    border-radius: 4px;
+    border-left: 3px solid #667eea;
+}
+
+/* Prompt Tabs */
+.prompt-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 20px;
+}
+
+.prompt-tab {
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.2s;
+}
+
+.prompt-tab:hover {
+    background: #f8f9fa;
+    color: #333;
+}
+
+.prompt-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    background: transparent;
+}
+
+.prompt-tab-content {
+    min-height: 200px;
+}
+
+.tab-pane {
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 
