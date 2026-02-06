@@ -41,7 +41,10 @@ async function askQuestion() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ question }),
+            body: JSON.stringify({ 
+                question,
+                session_id: currentSessionId  // Maintain conversation continuity
+            }),
         });
         
         const data = await response.json();
@@ -152,20 +155,14 @@ function displayResults(data) {
         }
     }
     
-    // Handle prompt if available - always show if SQL was generated
-    console.log('Prompt data:', data.prompt ? 'Available' : 'Not available');
-    console.log('Prompt length:', data.prompt ? data.prompt.length : 0);
-    const promptSection = document.getElementById('prompt-section');
-    if (data.sql) {
-        // If we have SQL, we should have a prompt - show the section
-        currentPrompt = data.prompt || 'Prompt not available';
-        promptSection.style.display = 'block';
-        console.log('Showing prompt section (SQL was generated)');
-    } else {
-        promptSection.style.display = 'none';
-        currentPrompt = '';
-        console.log('Hiding prompt section - no SQL generated');
+    // Display structured prompt in Query Prompt tab
+    if (data.prompt) {
+        currentPrompt = data.prompt;
+        displayStructuredPrompt(data.prompt);
     }
+    
+    // Display SQL in SQL tab
+    // (Already handled above in the SQL display section)
     
     // Scroll to results
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -484,7 +481,6 @@ function toggleSql() {
 function togglePrompt() {
     const promptContent = document.getElementById('prompt-content');
     const toggleBtn = document.getElementById('toggle-prompt-btn');
-    const promptDisplay = document.getElementById('prompt-display');
     
     promptExpanded = !promptExpanded;
     
@@ -492,9 +488,19 @@ function togglePrompt() {
         promptContent.style.display = 'block';
         toggleBtn.textContent = '▲ Hide Prompt';
         if (currentPrompt) {
-            promptDisplay.textContent = currentPrompt;
+            // Check if it's structured prompt or plain text
+            if (typeof currentPrompt === 'object') {
+                displayStructuredPrompt(currentPrompt);
+            } else {
+                const promptDisplay = document.getElementById('prompt-display');
+                if (promptDisplay) {
+                    promptDisplay.textContent = currentPrompt;
+                } else {
+                    promptContent.innerHTML = `<pre id="prompt-display" class="prompt-display">${escapeHtml(currentPrompt)}</pre>`;
+                }
+            }
         } else {
-            promptDisplay.textContent = 'No prompt information available';
+            promptContent.innerHTML = '<p>No prompt information available</p>';
         }
     } else {
         promptContent.style.display = 'none';
@@ -624,46 +630,260 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Display structured prompt with collapsible sections
+function displayStructuredPrompt(promptData) {
+    const promptContent = document.getElementById('prompt-content');
+    
+    let html = '<div class="structured-prompt">';
+    
+    // Section 1: System Instructions
+    if (promptData.system_instructions) {
+        html += createPromptSection('system-instructions', 'System Instructions', 
+            `<pre class="prompt-text">${escapeHtml(promptData.system_instructions)}</pre>`, true);
+    }
+    
+    // Section 2: DDL (Database Schema)
+    if (promptData.ddl && promptData.ddl.length > 0) {
+        const ddlContent = promptData.ddl.map(ddl => `<pre class="prompt-text">${escapeHtml(ddl)}</pre>`).join('');
+        html += createPromptSection('ddl', `DDL / Database Schema (${promptData.ddl.length})`, ddlContent, false);
+    }
+    
+    // Section 3: SQL Examples
+    if (promptData.sql_examples && promptData.sql_examples.length > 0) {
+        const examplesContent = promptData.sql_examples.map(ex => 
+            `<div class="sql-example">
+                <div class="example-question"><strong>Q:</strong> ${escapeHtml(ex.question)}</div>
+                <div class="example-sql"><strong>SQL:</strong><pre>${escapeHtml(ex.sql)}</pre></div>
+            </div>`
+        ).join('');
+        html += createPromptSection('sql-examples', `SQL Examples (${promptData.sql_examples.length})`, examplesContent, false);
+    }
+    
+    // Section 4: Documentation
+    if (promptData.documentation && promptData.documentation.length > 0) {
+        const docContent = '<ul class="documentation-list">' + 
+            promptData.documentation.map(doc => `<li>${escapeHtml(doc)}</li>`).join('') + 
+            '</ul>';
+        html += createPromptSection('documentation', `Documentation (${promptData.documentation.length})`, docContent, false);
+    }
+    
+    // Section 5: Tool Description
+    if (promptData.tool_description) {
+        const toolContent = `<pre class="prompt-text">${escapeHtml(JSON.stringify(promptData.tool_description, null, 2))}</pre>`;
+        html += createPromptSection('tool-description', 'Tool Description', toolContent, false);
+    }
+    
+    // Section 6: Conversation History
+    if (promptData.conversation_history && promptData.conversation_history.length > 0) {
+        const historyContent = promptData.conversation_history.map(qa => 
+            `<div class="conversation-item">
+                <div class="conv-question"><strong>Previous Q:</strong> ${escapeHtml(qa.question)}</div>
+                <div class="conv-sql"><strong>Previous SQL:</strong><pre>${escapeHtml(qa.sql)}</pre></div>
+            </div>`
+        ).join('');
+        html += createPromptSection('conversation-history', `Conversation History (${promptData.conversation_history.length} Q&As)`, historyContent, true);
+    }
+    
+    // Section 7: Current Question
+    if (promptData.current_question) {
+        html += createPromptSection('current-question', 'Current Question', 
+            `<div class="current-question-text">${escapeHtml(promptData.current_question)}</div>`, true);
+    }
+    
+    // Section 8: Full Text (complete prompt)
+    if (promptData.full_text) {
+        html += createPromptSection('full-text', 'Full Prompt Text', 
+            `<pre class="prompt-text">${escapeHtml(promptData.full_text)}</pre>`, false);
+    }
+    
+    html += '</div>';
+    promptContent.innerHTML = html;
+}
+
+// Create a collapsible prompt section
+function createPromptSection(id, title, content, expanded = false) {
+    const expandedClass = expanded ? 'expanded' : '';
+    const displayStyle = expanded ? 'block' : 'none';
+    const arrow = expanded ? '▼' : '▶';
+    
+    return `
+        <div class="prompt-section ${expandedClass}">
+            <div class="prompt-section-header" onclick="togglePromptSection('${id}')">
+                <span class="section-arrow" id="arrow-${id}">${arrow}</span>
+                <span class="section-title">${title}</span>
+            </div>
+            <div class="prompt-section-content" id="content-${id}" style="display: ${displayStyle};">
+                ${content}
+            </div>
+        </div>
+    `;
+}
+
+// Toggle a prompt section
+function togglePromptSection(sectionId) {
+    const content = document.getElementById(`content-${sectionId}`);
+    const arrow = document.getElementById(`arrow-${sectionId}`);
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        arrow.textContent = '▼';
+    } else {
+        content.style.display = 'none';
+        arrow.textContent = '▶';
+    }
+}
+
+// Switch between prompt tabs
+function switchPromptTab(tabName) {
+    const tabContent = document.querySelector('.prompt-tab-content');
+    
+    // Show tab content container on first interaction
+    if (tabContent && tabContent.style.display === 'none') {
+        tabContent.style.display = 'block';
+    }
+    
+    // Hide all tab panes
+    const allPanes = document.querySelectorAll('.tab-pane');
+    allPanes.forEach(pane => {
+        pane.style.display = 'none';
+        pane.classList.remove('active');
+    });
+    
+    // Remove active class from all tabs
+    const allTabs = document.querySelectorAll('.prompt-tab');
+    allTabs.forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab pane
+    const selectedPane = document.getElementById(`content-${tabName}`);
+    if (selectedPane) {
+        selectedPane.style.display = 'block';
+        selectedPane.classList.add('active');
+    }
+    
+    // Add active class to selected tab
+    const selectedTab = document.getElementById(`tab-${tabName}`);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+}
+
 // Question History Management
 function saveToHistory(question) {
-    let history = JSON.parse(localStorage.getItem('questionHistory') || '[]');
-    
-    // Remove if already exists (to move to top)
-    history = history.filter(q => q !== question);
-    
-    // Add to beginning
-    history.unshift(question);
-    
-    // Keep only last 20
-    history = history.slice(0, 20);
-    
-    localStorage.setItem('questionHistory', JSON.stringify(history));
+    // History is now stored in database automatically when queries are made
+    // Just refresh the display to show updated history from DB
     displayHistory();
 }
 
-function displayHistory() {
+async function displayHistory() {
     const historyDiv = document.getElementById('question-history');
     const clearBtn = document.getElementById('clear-history-btn');
-    const history = JSON.parse(localStorage.getItem('questionHistory') || '[]');
     
-    if (history.length === 0) {
-        historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">No recent questions</p>';
+    try {
+        // Fetch both pinned and recent questions
+        const [pinnedResponse, recentResponse] = await Promise.all([
+            fetch('/api/user/pinned-questions?user_id=default'),
+            fetch('/api/user/recent-questions?user_id=default&limit=15')
+        ]);
+        
+        if (!pinnedResponse.ok || !recentResponse.ok) {
+            throw new Error('Failed to fetch history');
+        }
+        
+        const pinnedData = await pinnedResponse.json();
+        const recentData = await recentResponse.json();
+        
+        const pinnedQuestions = pinnedData.questions || [];
+        const recentQuestions = recentData.questions || [];
+        
+        if (pinnedQuestions.length === 0 && recentQuestions.length === 0) {
+            historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">No recent questions</p>';
+            clearBtn.style.display = 'none';
+            return;
+        }
+        
+        clearBtn.style.display = 'none';  // Hide clear button since history is from DB
+        
+        let html = '';
+        
+        // Show pinned questions first with pin icon
+        if (pinnedQuestions.length > 0) {
+            html += pinnedQuestions.map(q => 
+                `<div class="history-item pinned-item">
+                    <span class="pin-icon" onclick="unpinQuestion(event, '${escapeHtml(q).replace(/'/g, "\\'")}')">📌</span>
+                    <span class="question-text" onclick="fillQuestion('${escapeHtml(q).replace(/'/g, "\\'")}')"
+                          title="${escapeHtml(q)}">${escapeHtml(q)}</span>
+                </div>`
+            ).join('');
+        }
+        
+        // Show recent questions below pinned ones with unpin icon
+        if (recentQuestions.length > 0) {
+            html += recentQuestions.map(q => 
+                `<div class="history-item">
+                    <span class="pin-icon" onclick="pinQuestion(event, '${escapeHtml(q).replace(/'/g, "\\'")}')">📍</span>
+                    <span class="question-text" onclick="fillQuestion('${escapeHtml(q).replace(/'/g, "\\'")}')"
+                          title="${escapeHtml(q)}">${escapeHtml(q)}</span>
+                </div>`
+            ).join('');
+        }
+        
+        historyDiv.innerHTML = html;
+    } catch (error) {
+        console.error('Error loading history:', error);
+        historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">Unable to load history</p>';
         clearBtn.style.display = 'none';
-        return;
     }
+}
+
+// Pin a question
+async function pinQuestion(event, question) {
+    event.stopPropagation();  // Prevent triggering fillQuestion
     
-    clearBtn.style.display = 'block';
-    historyDiv.innerHTML = history.map((q, index) => 
-        `<div class="history-item" onclick="fillQuestion('${escapeHtml(q).replace(/'/g, "\\'")}')"
-              title="${escapeHtml(q)}">${escapeHtml(q)}</div>`
-    ).join('');
+    try {
+        const response = await fetch('/api/user/pin-question', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: 'default', question: question})
+        });
+        
+        if (response.ok) {
+            displayHistory();  // Refresh the list
+        } else {
+            console.error('Failed to pin question');
+        }
+    } catch (error) {
+        console.error('Error pinning question:', error);
+    }
+}
+
+// Unpin a question
+async function unpinQuestion(event, question) {
+    event.stopPropagation();  // Prevent triggering fillQuestion
+    
+    try {
+        const response = await fetch('/api/user/unpin-question', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: 'default', question: question})
+        });
+        
+        if (response.ok) {
+            displayHistory();  // Refresh the list
+        } else {
+            console.error('Failed to unpin question');
+        }
+    } catch (error) {
+        console.error('Error unpinning question:', error);
+    }
 }
 
 function clearHistory() {
-    if (confirm('Clear all question history?')) {
-        localStorage.removeItem('questionHistory');
-        displayHistory();
-    }
+    // History is now managed in the database
+    // Clearing history would require database operations
+    // This function is kept for compatibility but does nothing
+    console.log('History is managed in the database');
 }
 
 // Chart Feature Initialization
@@ -1183,6 +1403,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.clearHistory = clearHistory;
     window.sortTable = sortTable;
     window.filterResults = filterResults;
+    window.pinQuestion = pinQuestion;
+    window.unpinQuestion = unpinQuestion;
+    window.togglePromptSection = togglePromptSection;
+    window.switchPromptTab = switchPromptTab;
     
     console.log('[Module] Functions exposed to window:', Object.keys(window).filter(k => ['askQuestion', 'sortTable', 'filterResults'].includes(k)));
 });

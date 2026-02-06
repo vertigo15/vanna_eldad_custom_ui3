@@ -37,16 +37,21 @@ def ask_question():
     try:
         data = request.get_json()
         question = data.get('question', '').strip()
+        session_id = data.get('session_id')  # Get session_id if provided
         
         if not question:
             return jsonify({'error': 'Question cannot be empty'}), 400
         
-        logger.info(f"Forwarding question to API: {question}")
+        logger.info(f"Forwarding question to API: {question} (session_id: {session_id})")
         
         # Call the FastAPI backend
+        payload = {'question': question}
+        if session_id:
+            payload['session_id'] = session_id
+        
         response = requests.post(
             f'{API_BASE_URL}/api/query',
-            json={'question': question},
+            json=payload,
             timeout=60
         )
         
@@ -96,6 +101,91 @@ def get_schema(table_name: str):
             return jsonify({'error': f'Failed to fetch schema for {table_name}'}), response.status_code
     except Exception as e:
         logger.error(f"Error fetching schema: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/recent-questions', methods=['GET'])
+def get_recent_questions():
+    """Get user's recent questions from conversation history."""
+    try:
+        user_id = request.args.get('user_id', 'default')
+        limit = request.args.get('limit', '15')
+        
+        response = requests.get(
+            f'{API_BASE_URL}/api/user/recent-questions',
+            params={'user_id': user_id, 'limit': limit},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to fetch recent questions'}), response.status_code
+    except Exception as e:
+        logger.error(f"Error fetching recent questions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/pinned-questions', methods=['GET'])
+def get_pinned_questions():
+    """Get user's pinned questions."""
+    try:
+        user_id = request.args.get('user_id', 'default')
+        
+        response = requests.get(
+            f'{API_BASE_URL}/api/user/pinned-questions',
+            params={'user_id': user_id},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to fetch pinned questions'}), response.status_code
+    except Exception as e:
+        logger.error(f"Error fetching pinned questions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/pin-question', methods=['POST'])
+def pin_question():
+    """Pin a question for the user."""
+    try:
+        data = request.get_json()
+        
+        response = requests.post(
+            f'{API_BASE_URL}/api/user/pin-question',
+            json=data,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to pin question'}), response.status_code
+    except Exception as e:
+        logger.error(f"Error pinning question: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/unpin-question', methods=['POST'])
+def unpin_question():
+    """Unpin a question for the user."""
+    try:
+        data = request.get_json()
+        
+        response = requests.post(
+            f'{API_BASE_URL}/api/user/unpin-question',
+            json=data,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to unpin question'}), response.status_code
+    except Exception as e:
+        logger.error(f"Error unpinning question: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -83,6 +83,21 @@ class VannaTextToSqlAgent:
             # Get RAG context from pgvector
             context = await self.memory.get_context_for_question(question)
             
+            # Get conversation context (last 2 Q&As) for short-term memory
+            conversation_context = []
+            if self.history:
+                try:
+                    conversation_context = await self.history.get_conversation_context(
+                        session_id=session_id,
+                        limit=2  # Last 2 Q&As
+                    )
+                    # Reverse to get chronological order (oldest first)
+                    conversation_context.reverse()
+                    if conversation_context:
+                        logger.info(f"🧠 Short-term memory: {len(conversation_context)} previous Q&As loaded for context")
+                except Exception as e:
+                    logger.error(f"Failed to fetch conversation context: {e}")
+            
             # Log query start to history
             if self.history:
                 try:
@@ -107,14 +122,50 @@ class VannaTextToSqlAgent:
             # Build enhanced system prompt with RAG context
             system_prompt = self._build_system_prompt(context)
             
-            # Build messages for LLM
+            # Build messages for LLM with conversation history
             messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Generate SQL for: {question}"}
+                {"role": "system", "content": system_prompt}
             ]
+            
+            # Add previous Q&As for conversation context (short-term memory)
+            for prev_qa in conversation_context:
+                if prev_qa.get('natural_language_query') and prev_qa.get('generated_sql'):
+                    messages.append({
+                        "role": "user",
+                        "content": f"Generate SQL for: {prev_qa['natural_language_query']}"
+                    })
+                    messages.append({
+                        "role": "assistant",
+                        "content": f"I'll generate SQL for that.\n\nSQL:\n{prev_qa['generated_sql']}"
+                    })
+            
+            # Add current question
+            messages.append({
+                "role": "user",
+                "content": f"Generate SQL for: {question}"
+            })
             
             # Get tools schema
             tools = [self.sql_tool.get_schema()]
+            
+            # Build structured prompt for UI display
+            structured_prompt = {
+                "system_instructions": self._extract_system_instructions(),
+                "ddl": context.get('ddl', []),
+                "sql_examples": context.get('sql_examples', []),
+                "documentation": context.get('documentation', []),
+                "tool_description": tools[0] if tools else None,
+                "conversation_history": [
+                    {
+                        "question": prev_qa.get('natural_language_query'),
+                        "sql": prev_qa.get('generated_sql')
+                    }
+                    for prev_qa in conversation_context
+                    if prev_qa.get('natural_language_query') and prev_qa.get('generated_sql')
+                ],
+                "current_question": question,
+                "full_text": self._format_full_prompt(system_prompt, conversation_context, question)
+            }
             
             # Generate SQL using LLM with tool calling
             llm_start_time = time.time()
@@ -133,7 +184,7 @@ class VannaTextToSqlAgent:
                 "sql": None,
                 "results": None,
                 "explanation": response.get("content", ""),
-                "prompt": system_prompt,
+                "prompt": structured_prompt,
                 "error": None
             }
             
@@ -358,6 +409,46 @@ IMPORTANT INSTRUCTIONS:
             return "\n".join(sql_lines).strip()
         
         return ""
+    
+    def _extract_system_instructions(self) -> str:
+        """Extract base system instructions without RAG context."""
+        return """You are a SQL expert assistant. Generate PostgreSQL queries for the AdventureWorksDW database.
+
+IMPORTANT INSTRUCTIONS:
+- Generate valid PostgreSQL syntax
+- Use proper table and column names from the schema
+- Include appropriate JOINs, WHERE clauses, and aggregations
+- Always use the run_sql tool to execute queries
+- Be concise and accurate
+- You must ONLY answer questions that are directly related to the provided data or the DB schema
+- If a question is not related to the data or schema , or is out of scope (e.g. politics, opinions, instructions unrelated to the database, general knowledge), respond with: I can only answer questions related to the data or analysis of the data.
+- **Language:** Match the user's language — English → English, Hebrew → Hebrew.
+- **Security:** SELECT queries only. If asked to modify data, respond: "I can only execute SELECT queries."
+
+**Additional guidelines:**
+- Ask clarifying questions if the request is ambiguous
+
+**Error Handling:**
+1. **On first error:** Analyze the error message. If the fix is obvious (typo, wrong column name, missing JOIN, syntax error), silently correct and retry — do NOT mention the error to the user.
+2. **On second error (or if the fix is unclear):** Stop retrying. Briefly explain the issue and ask the user for clarification.
+3. **Never retry more than once.**"""
+    
+    def _format_full_prompt(self, system_prompt: str, conversation_context: list, current_question: str) -> str:
+        """Format the full prompt text as sent to LLM."""
+        full_prompt = f"[SYSTEM]\n{system_prompt}\n\n"
+        
+        # Add conversation history
+        if conversation_context:
+            full_prompt += "[CONVERSATION HISTORY]\n"
+            for prev_qa in conversation_context:
+                if prev_qa.get('natural_language_query') and prev_qa.get('generated_sql'):
+                    full_prompt += f"\n[USER] Generate SQL for: {prev_qa['natural_language_query']}\n"
+                    full_prompt += f"[ASSISTANT] I'll generate SQL for that.\n\nSQL:\n{prev_qa['generated_sql']}\n"
+        
+        # Add current question
+        full_prompt += f"\n[CURRENT QUESTION]\n[USER] Generate SQL for: {current_question}"
+        
+        return full_prompt
 
 
 async def create_vanna_agent() -> VannaTextToSqlAgent:

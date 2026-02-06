@@ -241,6 +241,11 @@ export class ChartManager {
                 console.log('[ChartManager] User-requested type:', chartType);
             }
             
+            // Display chart prompt in Chart Prompt tab if available
+            if (data.prompt || data.system_message) {
+                this.displayChartPrompt(data);
+            }
+            
             // Cache the response
             sessionStorage.setItem(cacheKey, JSON.stringify(data.chart_config));
             
@@ -344,6 +349,53 @@ export class ChartManager {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
         }, 3000);
+    }
+    
+    /**
+     * Display chart prompt in the Chart Prompt tab
+     */
+    displayChartPrompt(chartData) {
+        const promptContent = document.getElementById('chart-prompt-content');
+        if (!promptContent) {
+            console.warn('[ChartManager] Chart prompt content element not found');
+            return;
+        }
+        
+        let html = '<div class="chart-prompt-view">';
+        
+        // System message
+        if (chartData.system_message) {
+            html += `
+                <div class="prompt-section">
+                    <h4>System Message</h4>
+                    <pre class="prompt-text">${this.escapeHtml(chartData.system_message)}</pre>
+                </div>
+            `;
+        }
+        
+        // User prompt
+        if (chartData.prompt) {
+            html += `
+                <div class="prompt-section">
+                    <h4>Chart Generation Prompt</h4>
+                    <pre class="prompt-text">${this.escapeHtml(chartData.prompt)}</pre>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        promptContent.innerHTML = html;
+        
+        console.log('[ChartManager] Chart prompt displayed in tab');
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     // Cache and preferences methods

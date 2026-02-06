@@ -67,6 +67,11 @@ class InsightsManager {
 
             // Display insights
             this.displayInsights(container, insights);
+            
+            // Display prompt in Insights Prompt tab if available
+            if (insights.prompt) {
+                this.displayInsightsPrompt(insights);
+            }
 
         } catch (error) {
             console.error('[InsightsManager] Failed to generate insights:', error);
@@ -177,6 +182,44 @@ class InsightsManager {
         `;
     }
 
+    /**
+     * Display insights prompt in the Insights Prompt tab
+     */
+    displayInsightsPrompt(insights) {
+        const promptContent = document.getElementById('insights-prompt-content');
+        if (!promptContent) {
+            console.warn('[InsightsManager] Insights prompt content element not found');
+            return;
+        }
+        
+        let html = '<div class="insights-prompt-view">';
+        
+        // System message
+        if (insights.system_message) {
+            html += `
+                <div class="prompt-section">
+                    <h4>System Message</h4>
+                    <pre class="prompt-text">${this.escapeHtml(insights.system_message)}</pre>
+                </div>
+            `;
+        }
+        
+        // User prompt
+        if (insights.prompt) {
+            html += `
+                <div class="prompt-section">
+                    <h4>Insights Generation Prompt</h4>
+                    <pre class="prompt-text">${this.escapeHtml(insights.prompt)}</pre>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        promptContent.innerHTML = html;
+        
+        console.log('[InsightsManager] Insights prompt displayed in tab');
+    }
+    
     /**
      * Escape HTML to prevent XSS
      */

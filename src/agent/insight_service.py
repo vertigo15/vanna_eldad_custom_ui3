@@ -25,9 +25,13 @@ async def generate_insights(
         dict: {
             "summary": str (one-line summary),
             "findings": [list of insight strings],
-            "suggestions": [list of suggestion strings]
+            "suggestions": [list of suggestion strings],
+            "prompt": str (the prompt used),
+            "system_message": str (the system message used)
         }
     """
+    system_message = "You are a senior data analyst specialized in finding actionable insights."
+    
     try:
         # Convert dataset to DataFrame if needed
         if isinstance(dataset, dict):
@@ -38,14 +42,17 @@ async def generate_insights(
         elif isinstance(dataset, pd.DataFrame):
             df = dataset
         else:
-            return _empty_insights("Unsupported dataset format")
+            prompt = "N/A - Unsupported dataset format"
+            return _empty_insights("Unsupported dataset format", prompt, system_message)
         
         # Check if dataset is empty or too small
         if df.empty:
-            return _empty_insights("No data returned from query")
+            prompt = "N/A - No data returned from query"
+            return _empty_insights("No data returned from query", prompt, system_message)
         
         if len(df) == 1:
-            return _empty_insights("Single record returned, no patterns to analyze")
+            prompt = "N/A - Single record, no patterns to analyze"
+            return _empty_insights("Single record returned, no patterns to analyze", prompt, system_message)
         
         # Prepare dataset summary for LLM
         dataset_summary = _prepare_dataset_summary(df)
@@ -59,12 +66,12 @@ async def generate_insights(
         
         # Call LLM if service is provided
         if llm_service is None:
-            return _empty_insights("LLM service not available")
+            return _empty_insights("LLM service not available", prompt, system_message)
         
         # Generate insights using LLM (await the async call)
         response = await llm_service.generate(
             messages=[
-                {"role": "system", "content": "You are a senior data analyst specialized in finding actionable insights."},
+                {"role": "system", "content": system_message},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -75,13 +82,19 @@ async def generate_insights(
         content = response.get("content", "")
         insights = _parse_insights_response(content)
         
+        # Include the prompt used
+        insights["prompt"] = prompt
+        insights["system_message"] = system_message
+        
         return insights
         
     except Exception as e:
         return {
             "summary": "Unable to generate insights",
             "findings": [f"Error: {str(e)}"],
-            "suggestions": []
+            "suggestions": [],
+            "prompt": prompt if 'prompt' in locals() else "N/A - Error occurred before prompt generation",
+            "system_message": system_message
         }
 
 
@@ -263,12 +276,14 @@ def _parse_insights_response(content: str) -> Dict[str, Any]:
         return _empty_insights("Unable to parse insights")
 
 
-def _empty_insights(message: str) -> Dict[str, Any]:
+def _empty_insights(message: str, prompt: str = "", system_message: str = "") -> Dict[str, Any]:
     """Return empty insights structure with a message."""
     return {
         "summary": message,
         "findings": [],
-        "suggestions": []
+        "suggestions": [],
+        "prompt": prompt,
+        "system_message": system_message
     }
 
 
