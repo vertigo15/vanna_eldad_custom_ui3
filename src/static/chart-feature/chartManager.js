@@ -352,7 +352,7 @@ export class ChartManager {
     }
     
     /**
-     * Display chart prompt in the Chart Prompt tab
+     * Display chart prompt in the Chart Prompt tab with collapsible sections
      */
     displayChartPrompt(chartData) {
         const promptContent = document.getElementById('chart-prompt-content');
@@ -361,32 +361,130 @@ export class ChartManager {
             return;
         }
         
-        let html = '<div class="chart-prompt-view">';
-        
-        // System message
-        if (chartData.system_message) {
-            html += `
-                <div class="prompt-section">
-                    <h4>System Message</h4>
-                    <pre class="prompt-text">${this.escapeHtml(chartData.system_message)}</pre>
-                </div>
-            `;
+        if (!chartData.prompt) {
+            promptContent.innerHTML = '<p style="color: #999;">No prompt available</p>';
+            return;
         }
         
-        // User prompt
-        if (chartData.prompt) {
-            html += `
-                <div class="prompt-section">
-                    <h4>Chart Generation Prompt</h4>
-                    <pre class="prompt-text">${this.escapeHtml(chartData.prompt)}</pre>
-                </div>
-            `;
+        // Parse the prompt into sections
+        const sections = this.parseChartPrompt(chartData.prompt);
+        
+        let html = '<div class="structured-prompt">';
+        
+        // Section 1: Chart Type Override (if present)
+        if (sections.chartTypeOverride) {
+            html += this.createPromptSection('chart-type-override', 'Chart Type Selection', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.chartTypeOverride)}</pre>`, true);
         }
+        
+        // Section 2: Column Information
+        if (sections.columnInfo) {
+            html += this.createPromptSection('chart-columns', 'Column Information', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.columnInfo)}</pre>`, false);
+        }
+        
+        // Section 3: Data Sample
+        if (sections.dataSample) {
+            html += this.createPromptSection('chart-data', 'Data Sample', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.dataSample)}</pre>`, false);
+        }
+        
+        // Section 4: Instructions
+        if (sections.instructions) {
+            html += this.createPromptSection('chart-instructions', 'Chart Instructions', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.instructions)}</pre>`, false);
+        }
+        
+        // Section 5: Full Prompt
+        html += this.createPromptSection('chart-full', 'Full Prompt Text', 
+            `<pre class="prompt-text">${this.escapeHtml(chartData.prompt)}</pre>`, false);
         
         html += '</div>';
         promptContent.innerHTML = html;
         
-        console.log('[ChartManager] Chart prompt displayed in tab');
+        console.log('[ChartManager] Chart prompt displayed in structured format');
+    }
+    
+    /**
+     * Parse chart prompt into sections
+     */
+    parseChartPrompt(prompt) {
+        const sections = {
+            chartTypeOverride: '',
+            columnInfo: '',
+            dataSample: '',
+            instructions: ''
+        };
+        
+        // Extract chart type override section
+        const chartTypeMatch = prompt.match(/##\s*CHART TYPE OVERRIDE([\s\S]*?)(?=Column Names:|$)/i);
+        if (chartTypeMatch) {
+            sections.chartTypeOverride = chartTypeMatch[0].trim();
+        }
+        
+        // Extract column information
+        const columnMatch = prompt.match(/Column Names:([\s\S]*?)(?=Data \(first|Instructions:|$)/i);
+        if (columnMatch) {
+            sections.columnInfo = 'Column Names:' + columnMatch[1].trim();
+        }
+        
+        // Extract data sample
+        const dataMatch = prompt.match(/Data \(first[^:]*\):([\s\S]*?)(?=Instructions:|$)/i);
+        if (dataMatch) {
+            sections.dataSample = dataMatch[0].trim();
+        }
+        
+        // Extract instructions
+        const instructionsMatch = prompt.match(/Instructions:([\s\S]*?)$/i);
+        if (instructionsMatch) {
+            sections.instructions = instructionsMatch[0].trim();
+        }
+        
+        // Fallback: if no sections found, put everything in instructions
+        if (!sections.columnInfo && !sections.dataSample && !sections.instructions) {
+            sections.instructions = prompt;
+        }
+        
+        return sections;
+    }
+    
+    /**
+     * Create a collapsible prompt section
+     */
+    createPromptSection(id, title, content, expanded = false) {
+        const expandedClass = expanded ? 'expanded' : '';
+        const displayStyle = expanded ? 'block' : 'none';
+        const arrow = expanded ? '▼' : '▶';
+        
+        return `
+            <div class="prompt-section ${expandedClass}">
+                <div class="prompt-section-header" onclick="toggleChartPromptSection('${id}')">
+                    <span class="section-arrow" id="arrow-${id}">${arrow}</span>
+                    <span class="section-title">${title}</span>
+                </div>
+                <div class="prompt-section-content" id="content-${id}" style="display: ${displayStyle};">
+                    ${content}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Toggle a prompt section
+     */
+    togglePromptSection(sectionId) {
+        const content = document.getElementById(`content-${sectionId}`);
+        const arrow = document.getElementById(`arrow-${sectionId}`);
+        
+        if (content && arrow) {
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                arrow.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                arrow.textContent = '▶';
+            }
+        }
     }
     
     /**
@@ -468,3 +566,19 @@ export class ChartManager {
         console.log('[ChartManager] Disposed');
     }
 }
+
+// Expose toggle function globally for onclick handlers
+window.toggleChartPromptSection = function(sectionId) {
+    const content = document.getElementById(`content-${sectionId}`);
+    const arrow = document.getElementById(`arrow-${sectionId}`);
+    
+    if (content && arrow) {
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            arrow.textContent = '▼';
+        } else {
+            content.style.display = 'none';
+            arrow.textContent = '▶';
+        }
+    }
+};

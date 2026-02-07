@@ -183,7 +183,7 @@ class InsightsManager {
     }
 
     /**
-     * Display insights prompt in the Insights Prompt tab
+     * Display insights prompt in the Insights Prompt tab with collapsible sections
      */
     displayInsightsPrompt(insights) {
         const promptContent = document.getElementById('insights-prompt-content');
@@ -192,32 +192,134 @@ class InsightsManager {
             return;
         }
         
-        let html = '<div class="insights-prompt-view">';
-        
-        // System message
-        if (insights.system_message) {
-            html += `
-                <div class="prompt-section">
-                    <h4>System Message</h4>
-                    <pre class="prompt-text">${this.escapeHtml(insights.system_message)}</pre>
-                </div>
-            `;
+        if (!insights.prompt) {
+            promptContent.innerHTML = '<p style="color: #999;">No prompt available</p>';
+            return;
         }
         
-        // User prompt
-        if (insights.prompt) {
-            html += `
-                <div class="prompt-section">
-                    <h4>Insights Generation Prompt</h4>
-                    <pre class="prompt-text">${this.escapeHtml(insights.prompt)}</pre>
-                </div>
-            `;
+        // Parse the prompt into sections
+        const sections = this.parseInsightsPrompt(insights.prompt);
+        
+        let html = '<div class="structured-prompt">';
+        
+        // Section 1: Main Instructions (Rules and Thresholds)
+        if (sections.mainInstructions) {
+            html += this.createPromptSection('insights-main', 'Instructions & Rules', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.mainInstructions)}</pre>`, true);
         }
+        
+        // Section 2: Dataset Summary
+        if (sections.datasetSummary) {
+            html += this.createPromptSection('insights-dataset', 'Dataset Summary', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.datasetSummary)}</pre>`, false);
+        }
+        
+        // Section 3: Column Statistics
+        if (sections.columnStats) {
+            html += this.createPromptSection('insights-stats', 'Column Statistics', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.columnStats)}</pre>`, false);
+        }
+        
+        // Section 4: Output Format
+        if (sections.outputFormat) {
+            html += this.createPromptSection('insights-format', 'Output Format', 
+                `<pre class="prompt-text">${this.escapeHtml(sections.outputFormat)}</pre>`, false);
+        }
+        
+        // Section 5: Full Prompt
+        html += this.createPromptSection('insights-full', 'Full Prompt Text', 
+            `<pre class="prompt-text">${this.escapeHtml(insights.prompt)}</pre>`, false);
         
         html += '</div>';
         promptContent.innerHTML = html;
         
-        console.log('[InsightsManager] Insights prompt displayed in tab');
+        console.log('[InsightsManager] Insights prompt displayed in structured format');
+    }
+    
+    /**
+     * Parse insights prompt into sections
+     */
+    parseInsightsPrompt(prompt) {
+        const sections = {
+            mainInstructions: '',
+            datasetSummary: '',
+            columnStats: '',
+            outputFormat: ''
+        };
+        
+        // Split by section headers
+        const datasetSummaryIndex = prompt.indexOf('## DATASET SUMMARY:');
+        const columnStatsIndex = prompt.indexOf('## COLUMN STATISTICS:');
+        const outputFormatIndex = prompt.indexOf('## OUTPUT FORMAT');
+        
+        // Extract main instructions (everything before DATASET SUMMARY)
+        if (datasetSummaryIndex !== -1) {
+            sections.mainInstructions = prompt.substring(0, datasetSummaryIndex).trim();
+        } else {
+            // Fallback: if no sections found, put everything in main instructions
+            sections.mainInstructions = prompt;
+            return sections;
+        }
+        
+        // Extract dataset summary (between DATASET SUMMARY and COLUMN STATISTICS)
+        if (datasetSummaryIndex !== -1 && columnStatsIndex !== -1) {
+            sections.datasetSummary = prompt.substring(datasetSummaryIndex + 19, columnStatsIndex).trim();
+        } else if (datasetSummaryIndex !== -1) {
+            sections.datasetSummary = prompt.substring(datasetSummaryIndex + 19).trim();
+        }
+        
+        // Extract column statistics (between COLUMN STATISTICS and OUTPUT FORMAT)
+        if (columnStatsIndex !== -1 && outputFormatIndex !== -1) {
+            sections.columnStats = prompt.substring(columnStatsIndex + 22, outputFormatIndex).trim();
+        } else if (columnStatsIndex !== -1) {
+            sections.columnStats = prompt.substring(columnStatsIndex + 22).trim();
+        }
+        
+        // Extract output format (from OUTPUT FORMAT to end)
+        if (outputFormatIndex !== -1) {
+            sections.outputFormat = prompt.substring(outputFormatIndex + 16).trim();
+        }
+        
+        return sections;
+    }
+    
+    /**
+     * Create a collapsible prompt section
+     */
+    createPromptSection(id, title, content, expanded = false) {
+        const expandedClass = expanded ? 'expanded' : '';
+        const displayStyle = expanded ? 'block' : 'none';
+        const arrow = expanded ? '▼' : '▶';
+        
+        return `
+            <div class="prompt-section ${expandedClass}">
+                <div class="prompt-section-header" onclick="toggleInsightsPromptSection('${id}')">
+                    <span class="section-arrow" id="arrow-${id}">${arrow}</span>
+                    <span class="section-title">${title}</span>
+                </div>
+                <div class="prompt-section-content" id="content-${id}" style="display: ${displayStyle};">
+                    ${content}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Toggle a prompt section
+     */
+    togglePromptSection(sectionId) {
+        const content = document.getElementById(`content-${sectionId}`);
+        const arrow = document.getElementById(`arrow-${sectionId}`);
+        
+        if (content && arrow) {
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                arrow.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                arrow.textContent = '▶';
+            }
+        }
     }
     
     /**
@@ -232,3 +334,19 @@ class InsightsManager {
 
 // Export for use in script.js
 window.InsightsManager = InsightsManager;
+
+// Expose toggle function globally for onclick handlers
+window.toggleInsightsPromptSection = function(sectionId) {
+    const content = document.getElementById(`content-${sectionId}`);
+    const arrow = document.getElementById(`arrow-${sectionId}`);
+    
+    if (content && arrow) {
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            arrow.textContent = '▼';
+        } else {
+            content.style.display = 'none';
+            arrow.textContent = '▶';
+        }
+    }
+};
