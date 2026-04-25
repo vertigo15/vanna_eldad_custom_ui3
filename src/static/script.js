@@ -334,23 +334,9 @@ function formatResultsAsTable(results) {
     return html;
 }
 
-// Render the actual table with distribution bar + dim badges + tabular-nums.
+// Render the actual table with dim badges + tabular-nums.
 function renderTable(results, rows) {
     const profile = profileColumns(results, rows);
-    const distStats = computeDistributionStats(rows, results.columns, profile);
-    // Only show the distribution column when it's actually meaningful:
-    //   - we found a numeric column to use as the metric
-    //   - more than one row to compare
-    //   - the values vary (min != max), so the bars won't all be identical
-    //   - the result includes at least one categorical/dim column to compare
-    //     against (otherwise the bar is decoration on a single number column)
-    const showDistribution =
-        profile.distributionColumn !== null &&
-        distStats.max > 0 &&
-        distStats.min !== distStats.max &&
-        rows.length > 1 &&
-        profile.dimCols.size > 0;
-    const distMax = distStats.max;
 
     let html = '<table id="results-table"><thead><tr>';
     results.columns.forEach((column, index) => {
@@ -359,9 +345,6 @@ function renderTable(results, rows) {
         const cls = isNum ? ' class="num-cell"' : '';
         html += `<th${cls} onclick="sortTable(${index})" style="cursor: pointer;" title="Click to sort">${escapeHtml(column)}${sortIcon}</th>`;
     });
-    if (showDistribution) {
-        html += '<th class="dist-col" title="Relative magnitude">Distribution</th>';
-    }
     html += '</tr></thead><tbody>';
 
     rows.forEach(row => {
@@ -370,13 +353,6 @@ function renderTable(results, rows) {
             const cell = Array.isArray(row) ? row[idx] : row[column];
             html += renderCellHtml(cell, idx, profile);
         });
-        if (showDistribution) {
-            const distVal = Array.isArray(row)
-                ? Number(row[profile.distributionColumn])
-                : Number(row[results.columns[profile.distributionColumn]]);
-            const pct = distMax > 0 ? Math.max(0, Math.min(100, Math.round((distVal / distMax) * 100))) : 0;
-            html += `<td class="dist-cell"><div class="dist-bar-track"><div class="dist-bar-fill" style="width:${pct}%"></div></div></td>`;
-        }
         html += '</tr>';
     });
 
@@ -404,7 +380,6 @@ function renderCellHtml(value, colIndex, profile) {
 function profileColumns(results, rows) {
     const numericCols = new Set();
     const dimCols = new Set();
-    let distributionColumn = null;
 
     const numCols = results.columns.length;
     const sampleSize = Math.min(rows.length, 200);
@@ -436,43 +411,7 @@ function profileColumns(results, rows) {
         }
     }
 
-    // Pick a distribution column: largest-magnitude numeric column.
-    let bestMax = -Infinity;
-    numericCols.forEach(idx => {
-        let max = 0;
-        const colName = results.columns[idx];
-        for (let r = 0; r < rows.length; r++) {
-            const row = rows[r];
-            const cell = Array.isArray(row) ? row[idx] : row[colName];
-            const num = Number(cell);
-            if (Number.isFinite(num) && Math.abs(num) > max) max = Math.abs(num);
-        }
-        if (max > bestMax) {
-            bestMax = max;
-            distributionColumn = idx;
-        }
-    });
-    return { numericCols, dimCols, distributionColumn };
-}
-
-function computeDistributionStats(rows, columns, profile) {
-    if (profile.distributionColumn === null) return { min: 0, max: 0 };
-    let max = -Infinity;
-    let min = Infinity;
-    const colName = columns[profile.distributionColumn];
-    for (let r = 0; r < rows.length; r++) {
-        const row = rows[r];
-        const cell = Array.isArray(row) ? row[profile.distributionColumn] : row[colName];
-        const num = Number(cell);
-        if (Number.isFinite(num)) {
-            const abs = Math.abs(num);
-            if (abs > max) max = abs;
-            if (abs < min) min = abs;
-        }
-    }
-    if (!Number.isFinite(max)) max = 0;
-    if (!Number.isFinite(min)) min = 0;
-    return { min, max };
+    return { numericCols, dimCols };
 }
 
 function formatNumeric(value) {
@@ -1111,7 +1050,7 @@ async function displayHistory() {
     
     const connection = getActiveConnection();
     if (!connection) {
-        historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">Pick a connection</p>';
+        historyDiv.innerHTML = '<p class="history-empty">Pick a connection to see your recent questions.</p>';
         if (clearBtn) clearBtn.style.display = 'none';
         return;
     }
@@ -1139,7 +1078,7 @@ async function displayHistory() {
         pinnedQuestionsCache = pinnedQuestions.slice();
 
         if (pinnedQuestions.length === 0 && recentQuestions.length === 0) {
-            historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">No recent questions</p>';
+            historyDiv.innerHTML = '<p class="history-empty">No questions yet — ask one above and it\'ll show up here.</p>';
             clearBtn.style.display = 'none';
             return;
         }
@@ -1173,7 +1112,7 @@ async function displayHistory() {
         historyDiv.innerHTML = html;
     } catch (error) {
         console.error('Error loading history:', error);
-        historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">Unable to load history</p>';
+        historyDiv.innerHTML = '<p class="history-empty">Unable to load history right now.</p>';
         clearBtn.style.display = 'none';
     }
 }

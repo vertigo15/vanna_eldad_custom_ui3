@@ -29,7 +29,7 @@
   --shadow-focus: 0 0 0 3px oklch(52% 0.22 280 / 0.25);
   --code-bg:   oklch(95% 0.002 260);
   --code-text: oklch(18% 0.01 260);
-  --color-bg-tertiary: oklch(94% 0.002 260);
+  --color-bg-tertiary: oklch(91% 0.004 260);
   --color-dim-bg:  oklch(95% 0.06 290);
   --color-dim-text: oklch(46% 0.22 280);
   --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
@@ -460,7 +460,7 @@ label {
 .results-display tbody tr { border-bottom: 1px solid var(--color-border); transition: background 100ms ease; }
 .results-display tbody tr:nth-child(even) { background: var(--color-surface-2); }
 .results-display tbody tr:hover { background: var(--color-surface-3); }
-.results-display tbody td { padding: var(--space-2) var(--space-4); color: var(--color-text); vertical-align: middle; }
+.results-display tbody td { padding: var(--space-3) var(--space-4); color: var(--color-text); vertical-align: middle; }
 .no-results { text-align: center; padding: var(--space-12) var(--space-6); color: var(--color-muted); font-style: italic; }
 .table-controls { margin-bottom: var(--space-3); }
 
@@ -698,16 +698,24 @@ label {
 }
 .table-item:hover { background: var(--color-surface-2); }
 .table-item.active {
-  background: oklch(95% 0.06 290);
-  color: oklch(46% 0.22 280);
+  background: var(--color-dim-bg);
+  color: var(--color-accent-2);
   font-weight: var(--weight-medium);
 }
 [data-theme="dark"] .table-item.active {
   background: oklch(28% 0.10 280 / 0.5);
-  color: oklch(85% 0.10 280);
+  color: var(--color-dim-text);
 }
-.table-item.active .table-icon { opacity: 1; color: oklch(46% 0.22 280); }
-[data-theme="dark"] .table-item.active .table-icon { color: oklch(85% 0.10 280); }
+.table-item.active .table-icon { opacity: 1; color: var(--color-accent-2); }
+[data-theme="dark"] .table-item.active .table-icon { color: var(--color-dim-text); }
+.history-empty {
+  padding: var(--space-3) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-faint);
+  font-style: italic;
+  text-align: center;
+  line-height: 1.5;
+}
 .history-item {
   padding: var(--space-2) var(--space-3); background: var(--color-surface-2);
   border-radius: var(--radius-md); display: flex; align-items: center;
@@ -845,8 +853,20 @@ label {
    DESCRIBE / STATS
    ============================================================= */
 
-.describe-section { margin-top: var(--space-4); padding: var(--space-4); background: var(--color-surface-2); border-radius: var(--radius-md); border: 1px solid var(--color-border); }
-.describe-section h3 { font-size: var(--text-md); color: var(--color-text); margin-bottom: var(--space-3); }
+.describe-section {
+  margin-top: var(--space-4);
+  padding: var(--space-4) 0 0;
+  background: var(--color-surface);
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+.describe-section h3 {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
 .stats-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-4); }
 .stat-column { background: var(--color-surface); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--color-border); }
 .stat-column h4 { font-size: var(--text-sm); color: var(--color-accent); margin-bottom: var(--space-2); border-bottom: 2px solid var(--color-accent); padding-bottom: var(--space-1); font-weight: var(--weight-semibold); }
@@ -1049,7 +1069,8 @@ label {
 }
 .results-title-block { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .result-title {
-  font-size: var(--text-base); font-weight: var(--weight-medium);
+  font-size: var(--text-md); font-weight: var(--weight-semibold);
+  letter-spacing: -0.015em;
   margin: 0; color: var(--color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -1086,7 +1107,7 @@ label {
 .results-card #chart-view-container { padding: var(--space-3) var(--space-4) var(--space-4); }
 
 /* =============================================================
-   DATA TABLE — distribution bar + dim badges + tabular-nums
+   DATA TABLE — dim badges + tabular-nums
    ============================================================= */
 .results-display .num-cell {
   font-variant-numeric: tabular-nums;
@@ -1104,23 +1125,6 @@ label {
   font-weight: var(--weight-medium);
   letter-spacing: 0.01em;
 }
-.dist-cell { width: 140px; min-width: 140px; }
-.dist-bar-track {
-  height: 6px;
-  width: 100%;
-  background: var(--color-surface-2);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-[data-theme="dark"] .dist-bar-track { background: oklch(22% 0.005 260); }
-.dist-bar-fill {
-  height: 100%;
-  background: var(--color-accent);
-  border-radius: var(--radius-full);
-  transition: width 200ms ease;
-}
-[data-theme="dark"] .dist-bar-fill { background: var(--color-accent-2); }
-.results-display thead th.dist-col { text-align: left; }
 
 /* =============================================================
    AUTOCOMPLETE / SUGGESTIONS DROPDOWN
