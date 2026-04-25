@@ -131,12 +131,11 @@ venna_test3/                       (repo dir, kept for now)
 ├── Dockerfile / Dockerfile.ui
 ├── .env                           METADATA_DB_* + AZURE_OPENAI_*
 ├── requirements.txt
-├── db/migrations/insights/        New idempotent migrations (CREATE IF NOT EXISTS)
+├── db/migrations/insights/        Idempotent migrations (CREATE IF NOT EXISTS)
 │   ├── 001_conversation_sessions.sql
 │   ├── 002_query_insights.sql
 │   ├── 003_pinned_questions.sql
 │   └── 004_helpers_and_views.sql
-├── db/migrations/_legacy/         Kept for history, NOT applied
 ├── scripts/run_insights_migrations.py
 ├── src/
 │   ├── config.py                  Settings: AZURE_OPENAI_* + METADATA_DB_*
