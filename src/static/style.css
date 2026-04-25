@@ -1095,7 +1095,9 @@ label {
   margin-bottom: var(--space-2);
 }
 .info-card-header h3 { margin: 0; }
-.info-card.sidebar-bottom { margin-top: auto; border-top: 1px solid var(--color-border); border-bottom: 0; }
+/* Last sidebar info-card drops its bottom border so the sidebar doesn't end
+   on a stray separator line. */
+.sidebar .info-card:last-child { border-bottom: 0; }
 .refresh-btn {
   width: 22px; height: 22px;
   display: inline-flex; align-items: center; justify-content: center;
