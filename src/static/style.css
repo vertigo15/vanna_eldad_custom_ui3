@@ -669,19 +669,132 @@ label {
   color: var(--color-text);
 }
 .connection-pill-caret { color: var(--color-muted); flex-shrink: 0; }
-.connection-select-overlay {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  opacity: 0; cursor: pointer; appearance: none;
-  -webkit-appearance: none;
-  border: 0; background: transparent;
-  font-size: var(--text-xs);
+/* Custom connection switcher — replaced the native <select> overlay. */
+.connection-switcher { position: relative; }
+.connection-pill-wrap:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
-.connection-select-overlay:focus { outline: none; }
-.connection-select-overlay option {
+.connection-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+  padding: var(--space-1);
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-2) transparent;
+}
+.connection-panel[hidden] { display: none; }
+.connection-panel::-webkit-scrollbar { width: 8px; }
+.connection-panel::-webkit-scrollbar-track { background: transparent; }
+.connection-panel::-webkit-scrollbar-thumb {
+  background: var(--color-border-2);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.connection-panel-search {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: var(--text-sm);
+  margin-bottom: var(--space-1);
+}
+.connection-panel-search:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-focus);
+}
+.connection-panel-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.connection-panel-item:hover,
+.connection-panel-item:focus {
+  background: var(--color-surface-2);
+}
+.connection-panel-item.is-current {
+  background: var(--color-dim-bg);
+  color: var(--color-accent-2);
+  font-weight: var(--weight-medium);
+}
+[data-theme="dark"] .connection-panel-item.is-current {
+  background: oklch(28% 0.10 280 / 0.4);
+  color: var(--color-dim-text);
+}
+.connection-panel-item-name {
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.connection-panel-item-type {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: lowercase;
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-full);
+  padding: 1px var(--space-2);
+}
+.connection-panel-item.is-current .connection-panel-item-type {
+  background: var(--color-surface);
+  color: var(--color-accent-2);
+}
+.connection-panel-item-check {
+  flex-shrink: 0;
+  width: 12px; height: 12px;
+  color: var(--color-accent-2);
+}
+[data-theme="dark"] .connection-panel-item-check { color: var(--color-dim-text); }
+.connection-panel-empty {
+  padding: var(--space-3);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-faint);
+  font-style: italic;
+}
+.connection-panel-footer {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+.connection-panel-footer-btn {
+  width: 100%;
+  height: auto;
+  padding: var(--space-2);
+  background: transparent;
+  color: var(--color-muted);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+  font-family: var(--font-sans);
+}
+.connection-panel-footer-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
 }
 .table-item {
   display: flex; align-items: center; gap: var(--space-2);

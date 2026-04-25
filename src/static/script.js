@@ -72,8 +72,6 @@ function setConnectionPillName(name) {
 }
 
 async function loadConnections() {
-    const select = document.getElementById('connection-select');
-    if (!select) return;
     setConnectionStatus('connecting');
     setConnectionPillName('Loading\u2026');
     try {
@@ -81,7 +79,6 @@ async function loadConnections() {
         const data = await response.json();
         availableConnections = (data && data.connections) || [];
         if (availableConnections.length === 0) {
-            select.innerHTML = '<option value="">No connections</option>';
             setActiveConnection('');
             setConnectionStatus('error');
             setConnectionPillName('No connections');
@@ -91,25 +88,25 @@ async function loadConnections() {
         const validStored = availableConnections.find(c => c.source_key === stored);
         const active = validStored ? validStored.source_key : availableConnections[0].source_key;
         setActiveConnection(active);
-        select.innerHTML = availableConnections.map(c => {
-            const label = `${c.display_name} (${c.database_type || 'unknown'})`;
-            const selected = c.source_key === active ? ' selected' : '';
-            return `<option value="${c.source_key}"${selected}>${label}</option>`;
-        }).join('');
         const activeRow = availableConnections.find(c => c.source_key === active);
         setConnectionPillName(activeRow ? activeRow.display_name : active);
-        setConnectionStatus('ok');
+        // Pill stays in 'connecting' until tables come back — set in loadTables.
     } catch (e) {
         console.error('Failed to load connections', e);
-        select.innerHTML = '<option value="">Failed to load</option>';
         setConnectionStatus('error');
         setConnectionPillName('Failed to load');
     }
 }
 
-function onConnectionChange() {
-    const select = document.getElementById('connection-select');
-    const newConnection = select.value;
+// Switch the active connection. Accepts an explicit source_key argument so
+// the new ConnectionPanel can call it directly; falls back to localStorage.
+function onConnectionChange(sourceKey) {
+    const newConnection = sourceKey || getActiveConnection();
+    if (!newConnection) return;
+    if (newConnection === getActiveConnection() && allTables.length > 0) {
+        // Same connection, already populated — no-op.
+        return;
+    }
     setActiveConnection(newConnection);
     // Reset session and clear caches that are connection-specific.
     currentSessionId = null;
@@ -120,12 +117,12 @@ function onConnectionChange() {
     const searchInput = document.getElementById('table-search');
     if (searchInput) { searchInput.style.display = 'none'; searchInput.value = ''; }
     const activeRow = availableConnections.find(c => c.source_key === newConnection);
-    setConnectionPillName(activeRow ? activeRow.display_name : (newConnection || 'No connection'));
-    setConnectionStatus(newConnection ? 'ok' : 'error');
+    setConnectionPillName(activeRow ? activeRow.display_name : newConnection);
+    setConnectionStatus('connecting');
     // Reset autocomplete caches (they're connection-specific).
     if (typeof SuggestionController !== 'undefined') SuggestionController.reset();
     // Auto-load tables for the new connection.
-    if (newConnection) loadTables();
+    loadTables();
     if (typeof displayHistory === 'function') displayHistory();
 }
 
@@ -737,32 +734,37 @@ function togglePrompt() {
     }
 }
 
-// Load tables
+// Load tables. Also drives the connection-status dot:
+// connecting → ok (on success or empty) → error (on fetch failure).
 async function loadTables() {
     const tablesList = document.getElementById('tables-list');
     const searchInput = document.getElementById('table-search');
-    tablesList.innerHTML = '<p style="color: #999; font-size: 0.9rem;">Loading...</p>';
-    
+    tablesList.innerHTML = '<p style="color: var(--color-faint); font-size: var(--text-xs); padding: 4px 0;">Loading\u2026</p>';
+
     const connection = requireConnection();
     if (!connection) {
-        tablesList.innerHTML = '<p style="color: #999; font-size: 0.9rem;">Pick a connection first</p>';
+        tablesList.innerHTML = '<p style="color: var(--color-faint); font-size: var(--text-xs); padding: 4px 0;">Pick a connection first</p>';
+        setConnectionStatus('error');
         return;
     }
 
+    setConnectionStatus('connecting');
     try {
         const response = await fetch('/api/tables?connection=' + encodeURIComponent(connection));
         const data = await response.json();
-        
+
         if (data.tables && data.tables.length > 0) {
             allTables = data.tables;
             searchInput.style.display = 'block';
             displayFilteredTables(allTables);
         } else {
-            tablesList.innerHTML = '<p style="color: #999; font-size: 0.9rem;">No tables found</p>';
+            tablesList.innerHTML = '<p style="color: var(--color-faint); font-size: var(--text-xs); padding: 4px 0;">No tables found</p>';
         }
+        setConnectionStatus('ok');
     } catch (error) {
-        tablesList.innerHTML = '<p style="color: #c33; font-size: 0.9rem;">Failed to load tables</p>';
+        tablesList.innerHTML = '<p style="color: var(--color-error); font-size: var(--text-xs); padding: 4px 0;">Failed to load tables</p>';
         console.error('Error loading tables:', error);
+        setConnectionStatus('error');
     }
 }
 
@@ -1733,6 +1735,208 @@ function initCodeMirror(sqlContent) {
 }
 
 // ======================================================
+// CONNECTION PANEL — custom listbox replacing native <select>
+// ======================================================
+//
+// Wires up the pill (#connection-pill) to a panel (#connection-panel) listing
+// every active connection (loaded from /api/connections into
+// `availableConnections`). Behaviour:
+//   • Click pill / Enter / Space / ArrowDown → open panel.
+//   • Click outside / Escape → close.
+//   • ArrowUp/ArrowDown → navigate items (focusable rows).
+//   • Enter / Space / click on row → switch connection.
+//   • Search input shown when there are >= 5 connections.
+//   • Footer button refreshes the metadata cache for the active connection
+//     via POST /api/connections/{src}/refresh-metadata.
+const ConnectionPanel = (function () {
+    let isOpen = false;
+    let searchTerm = '';
+
+    const pillEl = () => document.getElementById('connection-pill');
+    const panelEl = () => document.getElementById('connection-panel');
+
+    function open() {
+        if (isOpen) return;
+        if (!availableConnections || availableConnections.length === 0) return;
+        isOpen = true;
+        const p = pillEl();
+        if (p) p.setAttribute('aria-expanded', 'true');
+        render();
+        const pan = panelEl();
+        if (pan) pan.hidden = false;
+        // Focus search input if present, otherwise first item.
+        const search = pan && pan.querySelector('.connection-panel-search');
+        if (search) {
+            search.focus();
+        } else {
+            const first = pan && pan.querySelector('.connection-panel-item');
+            if (first) first.focus();
+        }
+    }
+
+    function close() {
+        if (!isOpen) return;
+        isOpen = false;
+        searchTerm = '';
+        const pan = panelEl();
+        if (pan) { pan.hidden = true; pan.innerHTML = ''; }
+        const p = pillEl();
+        if (p) {
+            p.setAttribute('aria-expanded', 'false');
+            // Return focus to the trigger for keyboard users.
+            p.focus();
+        }
+    }
+
+    function toggle() { isOpen ? close() : open(); }
+
+    function render() {
+        const pan = panelEl();
+        if (!pan) return;
+        const active = getActiveConnection();
+        const term = searchTerm.toLowerCase();
+        const all = availableConnections || [];
+        const filtered = all.filter(c =>
+            !term ||
+            (c.display_name || '').toLowerCase().includes(term) ||
+            (c.source_key || '').toLowerCase().includes(term) ||
+            (c.database_type || '').toLowerCase().includes(term)
+        );
+        const showSearch = all.length >= 5;
+
+        let html = '';
+        if (showSearch) {
+            html += `<input type="text" class="connection-panel-search" placeholder="Search connections\u2026" value="${escapeHtml(searchTerm)}" aria-label="Search connections" />`;
+        }
+        if (filtered.length === 0) {
+            const msg = term ? `No connections match "${escapeHtml(term)}"` : 'No connections available';
+            html += `<div class="connection-panel-empty">${msg}</div>`;
+        } else {
+            html += filtered.map(c => {
+                const isCurrent = c.source_key === active;
+                const cls = 'connection-panel-item' + (isCurrent ? ' is-current' : '');
+                const dbType = (c.database_type || 'unknown').toLowerCase();
+                const check = isCurrent
+                    ? '<svg class="connection-panel-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg>'
+                    : '';
+                return `<div class="${cls}" role="option" tabindex="0" data-source-key="${escapeHtml(c.source_key)}" aria-selected="${isCurrent}">` +
+                    `<span class="connection-panel-item-name">${escapeHtml(c.display_name || c.source_key)}</span>` +
+                    `<span class="connection-panel-item-type">${escapeHtml(dbType)}</span>` +
+                    `${check}</div>`;
+            }).join('');
+        }
+        if (active) {
+            const activeRow = all.find(c => c.source_key === active);
+            if (activeRow) {
+                html += `<div class="connection-panel-footer"><button type="button" class="connection-panel-footer-btn" data-action="refresh">\u21bb Refresh metadata for ${escapeHtml(activeRow.display_name || active)}</button></div>`;
+            }
+        }
+        pan.innerHTML = html;
+
+        // Wire item interactions.
+        pan.querySelectorAll('.connection-panel-item').forEach(node => {
+            node.addEventListener('click', () => pick(node.dataset.sourceKey));
+            node.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    pick(node.dataset.sourceKey);
+                }
+            });
+        });
+        // Search input.
+        const search = pan.querySelector('.connection-panel-search');
+        if (search) {
+            search.addEventListener('input', (e) => {
+                searchTerm = e.target.value;
+                render();
+                const fresh = pan.querySelector('.connection-panel-search');
+                if (fresh) {
+                    fresh.focus();
+                    fresh.setSelectionRange(searchTerm.length, searchTerm.length);
+                }
+            });
+            search.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const first = pan.querySelector('.connection-panel-item');
+                    if (first) first.focus();
+                }
+            });
+        }
+        // Footer refresh.
+        const refresh = pan.querySelector('.connection-panel-footer-btn[data-action="refresh"]');
+        if (refresh) {
+            refresh.addEventListener('click', () => refreshActiveMetadata());
+        }
+    }
+
+    function pick(sourceKey) {
+        if (!sourceKey) { close(); return; }
+        if (sourceKey === getActiveConnection()) { close(); return; }
+        // Close first so focus returns to pill before tables refresh kicks in.
+        close();
+        onConnectionChange(sourceKey);
+    }
+
+    async function refreshActiveMetadata() {
+        const active = getActiveConnection();
+        if (!active) { close(); return; }
+        close();
+        try {
+            setConnectionStatus('connecting');
+            await fetch('/api/connections/' + encodeURIComponent(active) + '/refresh-metadata', { method: 'POST' });
+            if (typeof SuggestionController !== 'undefined') SuggestionController.reset();
+            allTables = [];
+            await loadTables();
+        } catch (e) {
+            console.error('Failed to refresh metadata', e);
+            setConnectionStatus('error');
+        }
+    }
+
+    function onPanelKeydown(e) {
+        if (!isOpen) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            close();
+            return;
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            const items = Array.from(panelEl().querySelectorAll('.connection-panel-item'));
+            if (items.length === 0) return;
+            e.preventDefault();
+            const cur = document.activeElement;
+            let i = items.indexOf(cur);
+            i = e.key === 'ArrowDown'
+                ? (i + 1) % items.length
+                : (i - 1 + items.length) % items.length;
+            items[i].focus();
+        }
+    }
+
+    function init() {
+        const p = pillEl();
+        if (p) {
+            p.addEventListener('click', () => toggle());
+            p.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); open(); }
+            });
+        }
+        const pan = panelEl();
+        if (pan) pan.addEventListener('keydown', onPanelKeydown);
+        document.addEventListener('click', (e) => {
+            if (!isOpen) return;
+            const switcher = document.querySelector('.connection-switcher');
+            if (switcher && switcher.contains(e.target)) return;
+            close();
+        });
+    }
+
+    return { init, open, close, toggle, render };
+})();
+
+// ======================================================
 // SIDEBAR TOGGLE
 // ======================================================
 
@@ -2495,6 +2699,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Sidebar overlay dismiss
     const overlay = document.getElementById('sidebar-overlay');
     if (overlay) overlay.addEventListener('click', toggleSidebar);
+
+    // Custom connection switcher (replaces the native <select>).
+    if (typeof ConnectionPanel !== 'undefined') ConnectionPanel.init();
 
     // Question input keyboard shortcuts + autocomplete wiring
     const questionInput = document.getElementById('question-input');
