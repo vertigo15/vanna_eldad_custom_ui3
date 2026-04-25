@@ -32,7 +32,9 @@ class InsightsManager {
 
         try {
             // Call insights API
+            const connection = (typeof getActiveConnection === 'function') ? getActiveConnection() : '';
             const requestBody = {
+                connection,
                 dataset: results,
                 question: question
             };
@@ -156,11 +158,12 @@ class InsightsManager {
         container.innerHTML = `
             <div class="insights-section">
                 <div class="insights-header">
-                    <h3>💡 Insights</h3>
+                    <h3>Insights</h3>
                 </div>
-                <div class="insights-loading">
-                    <div class="spinner"></div>
-                    <p>Analyzing data...</p>
+                <div class="insights-loading" role="status" aria-label="Analyzing data...">
+                    <div class="skeleton" style="height: 1rem; width: 80%;"></div>
+                    <div class="skeleton" style="height: 1rem; width: 60%;"></div>
+                    <div class="skeleton" style="height: 1rem; width: 72%;"></div>
                 </div>
             </div>
         `;

@@ -1,34 +1,44 @@
-# Vanna 2.0 Text-to-SQL Application
+# Jeen Insights
 
-A production-ready **Text-to-SQL** application using **Vanna 2.0** architecture with **Azure OpenAI** and **pgvector** for natural language queries against AdventureWorksDW PostgreSQL database.
+A multi-connection, natural-language analytics application powered by Azure
+OpenAI. Jeen Insights reads curated metadata (tables, columns, relationships,
+business terms, knowledge pairs) directly from the shared Jeen metadata
+database and lets a user ask questions against any registered connection.
+
+> **Note:** the repository directory is still named `venna_test3` for legacy
+> reasons; the application itself, container names, and all user-facing
+> branding are **Jeen Insights**.
 
 ## Features
 
-- 🤖 **Vanna 2.0 Architecture**: Custom agent orchestrator with RAG-based SQL generation
-- 🔵 **Azure OpenAI Integration**: GPT-5.1 for LLM, text-embedding-3-large-2 for embeddings
-- 📊 **pgvector Storage**: Vector database for DDL, documentation, and SQL examples
-- 🐘 **PostgreSQL Support**: Query AdventureWorksDW database with natural language
-- 🚀 **FastAPI Backend**: RESTful API with health checks and query endpoints
-- 🎨 **Web UI**: Beautiful, modern interface for asking questions (NEW!)
-- 🐳 **Docker Compose**: Complete containerized setup
+- 🤖 **Azure OpenAI agent** — GPT model orchestrates SELECT-only SQL execution.
+- 🔌 **Multi-connection** — pick any active connection from
+  `public.metadata_sources`. Each connection has its own curated metadata.
+- 📚 **No RAG / no embeddings** — curated metadata from Schema Modeler is
+  injected directly into the system prompt at every turn.
+- 🐘 **Shared Jeen metadata DB** — Jeen Insights writes only to tables with the
+  `insights_` prefix and reads from `metadata_*` / `knowledge_pairs`.
+- 🐳 **Docker-first** — `docker-compose up -d` brings up the API + UI.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Docker Compose                               │
-│  ┌──────────────┐        ┌──────────────┐     ┌─────────────┐  │
-│  │  vanna-ui    │───────▶│  vanna-app   │────▶│ pgvector-db │  │
-│  │  (Flask UI)  │        │  (FastAPI)   │     │ (Vectors)   │  │
-│  │  Port: 8501  │        │  Port: 8000  │     │ Port: 5433  │  │
-│  └──────────────┘        └──────────────┘     └─────────────┘  │
-│                                 │                                │
-│                                 ▼                                │
-│  ┌───────────────────────────────────────────────────────────┐ │
-│  │ Azure OpenAI (gpt-5.1 + embeddings)                       │ │
-│  │ AdventureWorksDW PostgreSQL (Data Source)                 │ │
-│  └───────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            Docker Compose                                 │
+│  ┌──────────────────┐         ┌────────────────────┐                      │
+│  │ jeen-insights-ui │────────▶│ jeen-insights-api  │                      │
+│  │   (Flask UI)     │         │ (FastAPI agent)    │                      │
+│  │   :8501          │         │   :8001            │                      │
+│  └──────────────────┘         └────────┬───────────┘                      │
+│                                        │                                  │
+│                                        ▼                                  │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │ Azure OpenAI (gpt-5.1)                                              │  │
+│  │ Shared metadata DB (jeen_data_metadata_dev) — read curated metadata │  │
+│  │   + insights_* operational tables (sessions / insights / pins)      │  │
+│  │ Per-connection PostgreSQL data sources (resolved at runtime)        │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -37,262 +47,125 @@ A production-ready **Text-to-SQL** application using **Vanna 2.0** architecture 
 
 - Docker Desktop
 - Azure OpenAI API access
-- AdventureWorksDW PostgreSQL database
+- A Jeen metadata DB with at least one row in `public.metadata_sources` and
+  the curated `metadata_tables` / `metadata_columns` / `metadata_relationships`
+  / `knowledge_pairs` / `metadata_business_terms` rows for that connection
+  (use Schema Modeler to set them up).
 
-### 1. Start Services
+### 1. Configure environment
 
-```bash
-docker-compose up -d
-```
-
-This will start:
-- **pgvector-db**: Vector database on port 5433
-- **vanna-app**: FastAPI application on port 8000
-- **vanna-ui**: Web UI on port 8501
-
-### 2. Load Training Data
-
-```bash
-docker exec -it vanna-app python scripts/load_training_data.py
-```
-
-This loads:
-- 5 DDL statements
-- 5 documentation entries
-- 8 SQL example pairs
-
-### 3. Access the UI
-
-Open your browser and navigate to:
-
-**http://localhost:8501**
-
-You'll see a beautiful web interface where you can:
-- Ask questions in natural language
-- View generated SQL
-- See query results in formatted tables
-- Browse available database tables
-- Try sample questions
-
-**See [UI_README.md](UI_README.md) for detailed UI documentation.**
-
-### 4. Test the API (Optional)
-
-**Health Check:**
-```bash
-curl http://localhost:8000/health
-```
-
-**Query Database:**
-```bash
-curl -X POST http://localhost:8000/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is the total revenue?"}'
-```
-
-**List Tables:**
-```bash
-curl http://localhost:8000/api/tables
-```
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Service info |
-| `/health` | GET | Health check |
-| `/api/query` | POST | Process natural language query |
-| `/api/tables` | GET | List all tables |
-| `/api/schema/{table}` | GET | Get table schema |
-
-### Example Query Request
-
-```json
-{
-  "question": "Show me top 10 customers by total purchases"
-}
-```
-
-### Example Query Response
-
-```json
-{
-  "question": "Show me top 10 customers by total purchases",
-  "sql": "SELECT c.FirstName, c.LastName, SUM(f.SalesAmount) as TotalPurchases\nFROM FactInternetSales f\nJOIN DimCustomer c ON f.CustomerKey = c.CustomerKey\nGROUP BY c.CustomerKey, c.FirstName, c.LastName\nORDER BY TotalPurchases DESC\nLIMIT 10;",
-  "results": {
-    "columns": ["firstname", "lastname", "totalpurchases"],
-    "rows": [...],
-    "row_count": 10
-  },
-  "explanation": "Generated SQL query to find top customers",
-  "error": null
-}
-```
-
-## Project Structure
-
-```
-venna_test3/
-├── docker-compose.yml          # Docker services configuration
-├── Dockerfile                  # Application container
-├── .env                        # Environment variables
-├── requirements.txt            # Python dependencies
-├── src/
-│   ├── config.py              # Configuration from .env
-│   ├── main.py                # FastAPI application
-│   ├── agent/
-│   │   ├── vanna_agent.py     # Agent orchestrator
-│   │   ├── llm_service.py     # Azure OpenAI LLM
-│   │   └── user_resolver.py   # User management
-│   ├── memory/
-│   │   ├── pgvector_memory.py # Custom AgentMemory
-│   │   └── embedding_service.py # Azure embeddings
-│   └── tools/
-│       └── sql_tool.py        # SQL execution tool
-├── training_data/
-│   ├── ddl.json               # Database schema
-│   ├── documentation.json     # Business rules
-│   └── sql_examples.json      # Example queries
-└── scripts/
-    ├── init_pgvector.sql      # Database initialization
-    └── load_training_data.py  # Training data loader
-```
-
-## How It Works
-
-### 1. RAG-Based SQL Generation
-
-When a user asks a question:
-
-1. **Embedding**: Question is embedded using Azure OpenAI
-2. **Retrieval**: pgvector searches for:
-   - Relevant DDL statements (schema)
-   - Business documentation
-   - Similar SQL examples
-3. **Augmentation**: Context is injected into LLM prompt
-4. **Generation**: Azure OpenAI GPT-5.1 generates SQL
-5. **Execution**: SQL runs against AdventureWorksDW
-6. **Learning**: Successful queries saved to memory
-
-### 2. Vector Storage
-
-pgvector stores embeddings for:
-
-- **vanna_ddl**: Database schema (3072-dim vectors)
-- **vanna_documentation**: Business rules
-- **vanna_sql_examples**: Question-SQL pairs
-- **vanna_tool_memory**: Past successful queries
-
-### 3. Components
-
-- **VannaTextToSqlAgent**: Main orchestrator
-- **AzureOpenAILlmService**: GPT-5.1 for SQL generation
-- **AzureEmbeddingService**: text-embedding-3-large-2
-- **PgVectorAgentMemory**: Custom memory with RAG
-- **PostgresSqlRunner**: Execute SQL on data source
-
-## Configuration
-
-All configuration is in `.env`:
+Copy `.env` and set:
 
 ```env
-# Azure OpenAI
-AZURE_OPENAI_API_KEY=your_key
-AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_OPENAI_API_KEY=...
+AZURE_OPENAI_ENDPOINT=https://<your-aoai>.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5.1
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-large-2
 
-# Data Source (AdventureWorksDW)
-DATA_SOURCE_HOST=your-postgres.database.azure.com
-DATA_SOURCE_DB=AdventureWorksDW
-DATA_SOURCE_USER=admin
-DATA_SOURCE_PASSWORD=password
-
-# pgvector (local)
-PGVECTOR_HOST=pgvector-db
-PGVECTOR_DB=vanna_vectors
-PGVECTOR_USER=vanna
-PGVECTOR_PASSWORD=vanna_secure_password_123
+METADATA_DB_HOST=jeen-pg-dev-weu.postgres.database.azure.com
+METADATA_DB_PORT=5432
+METADATA_DB_NAME=jeen_data_metadata_dev
+METADATA_DB_USER=jeen_pg_dev_admin
+METADATA_DB_PASSWORD=<rotate>
+METADATA_DB_SSL=true
 ```
 
-## Development
-
-### Run Locally (without Docker)
+### 2. Start the stack
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Update .env (set PGVECTOR_HOST=localhost)
-# Start pgvector separately
-
-# Run application
-python -m uvicorn src.main:app --reload
+docker-compose up -d --build
 ```
 
-### View Logs
+### 3. Apply the operational migrations (once)
 
 ```bash
-# Application logs
-docker logs -f vanna-app
-
-# pgvector logs
-docker logs -f pgvector-db
+docker exec jeen-insights-api python scripts/run_insights_migrations.py
 ```
 
-### Stop Services
+This creates `insights_conversation_sessions`, `insights_query_insights`,
+`insights_pinned_questions`, plus helpers and views. All migrations are
+idempotent and only add **new** tables — they never touch existing ones.
 
-```bash
-docker-compose down
+### 4. Open the UI
 
-# With volume cleanup
-docker-compose down -v
+http://localhost:8501
+
+Pick a connection from the dropdown in the top bar and ask a question.
+
+## API surface
+
+| Method | Endpoint                                          | Notes                                                  |
+|--------|---------------------------------------------------|--------------------------------------------------------|
+| GET    | `/api/connections`                                | List active connections (no secrets).                  |
+| GET    | `/api/connections/{source_key}`                   | Connection details + metadata row counts.              |
+| POST   | `/api/connections/{source_key}/refresh-metadata`  | Invalidate the metadata loader cache for a source.     |
+| POST   | `/api/query`                                      | Body: `{question, connection, session_id?}`.           |
+| GET    | `/api/tables?connection=<source_key>`             | List tables on the chosen data source.                 |
+| GET    | `/api/schema/{table}?connection=<source_key>`     | Column-level schema.                                   |
+| POST   | `/api/generate-insights`                          | Body must include `connection` + `dataset` + `question`.|
+| POST   | `/api/generate-chart` / `/api/enhance-chart`      | Same: `connection` is required.                        |
+| POST   | `/api/feedback`                                   | Records `thumbs_up` / `thumbs_down` / `edited`.        |
+| GET    | `/api/conversation/{session_id}`                  | Conversation history with insights.                    |
+| GET/POST | `/api/user/recent-questions` / `…/pin-question` | Per-(user, connection) history.                        |
+
+Every endpoint that operates on a dataset requires the `connection` parameter
+(the `source_key` from `metadata_sources`). Requests without it return 400.
+
+## What the agent does on every question
+
+1. Resolve the active `source_key` and load the per-connection metadata bundle
+   (six SQL queries against `metadata_*` / `knowledge_pairs` / 
+   `metadata_business_terms`).
+2. `str.format` the metadata into `src/agent/prompts/jeen_insights_system.md`.
+3. Replay the last two Q&As from `insights_conversation_sessions` for
+   short-term context.
+4. Call Azure OpenAI with the `run_sql` tool schema bound to the connection's
+   `PostgresSqlRunner`.
+5. Execute the SQL, log the full lifecycle (LLM tokens / latency / row count)
+   to `insights_conversation_sessions` partitioned by `source_key`.
+
+## Project layout
+
+```
+venna_test3/                       (repo dir, kept for now)
+├── docker-compose.yml             jeen-insights-api + jeen-insights-ui
+├── Dockerfile / Dockerfile.ui
+├── .env                           METADATA_DB_* + AZURE_OPENAI_*
+├── requirements.txt
+├── db/migrations/insights/        New idempotent migrations (CREATE IF NOT EXISTS)
+│   ├── 001_conversation_sessions.sql
+│   ├── 002_query_insights.sql
+│   ├── 003_pinned_questions.sql
+│   └── 004_helpers_and_views.sql
+├── db/migrations/_legacy/         Kept for history, NOT applied
+├── scripts/run_insights_migrations.py
+├── src/
+│   ├── config.py                  Settings: AZURE_OPENAI_* + METADATA_DB_*
+│   ├── main.py                    FastAPI app + AgentRegistry lifespan
+│   ├── ui_app.py                  Flask proxy → FastAPI
+│   ├── agent/
+│   │   ├── jeen_insights_agent.py JeenInsightsAgent + AgentRegistry
+│   │   ├── conversation_history.py
+│   │   ├── llm_service.py
+│   │   ├── insight_service.py
+│   │   ├── profiling_service.py
+│   │   ├── sweetviz_service.py
+│   │   ├── user_resolver.py
+│   │   └── prompts/jeen_insights_system.md
+│   ├── connections/connection_service.py
+│   ├── metadata/
+│   │   ├── metadata_db.py
+│   │   └── metadata_loader.py
+│   ├── tools/sql_tool.py          Per-connection PostgresSqlRunner
+│   ├── templates/index.html       Connection selector + main UI
+│   └── static/                    script.js / style.css / chart-feature / insights / profiling
 ```
 
-## Sample Questions
+## Roadmap
 
-Try these natural language queries:
-
-- "What is the total revenue?"
-- "Show me top 10 customers by total purchases"
-- "How many high-value customers do we have?"
-- "What are the total sales by year?"
-- "Show me the top 5 products by revenue"
-- "What is the average order value?"
-- "Show sales by country"
-
-## Troubleshooting
-
-### pgvector connection failed
-
-Ensure pgvector container is healthy:
-```bash
-docker ps
-docker logs pgvector-db
-```
-
-### Azure OpenAI 401 Unauthorized
-
-Check API key and endpoint in `.env`
-
-### Training data not loading
-
-Check file paths and permissions:
-```bash
-docker exec -it vanna-app ls -la /app/training_data
-```
-
-### SQL execution errors
-
-Verify AdventureWorksDW connection:
-```bash
-curl http://localhost:8000/api/tables
-```
+- Connection types beyond Postgres (currently returns 501 for Snowflake /
+  PowerBI / etc.).
+- Encrypted secrets at rest in `metadata_sources`.
 
 ## License
 
-MIT License
-
-## Contributing
-
-Contributions welcome! Please open issues and pull requests.
+MIT

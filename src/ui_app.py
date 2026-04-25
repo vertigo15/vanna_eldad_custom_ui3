@@ -1,413 +1,261 @@
-"""Vanna 2.0 Basic UI using Flask."""
+"""Flask UI for Jeen Insights.
 
-import os
+Acts as a thin pass-through to the FastAPI backend. The browser sends a
+`connection` (source_key) along with every data-related request; this UI
+forwards it on without inspecting it.
+"""
+
+from __future__ import annotations
+
 import logging
-from flask import Flask, render_template, request, jsonify
-import requests
-from typing import Dict, Any, Optional
+import os
+from typing import Any, Dict
 
-# Configure logging
+import requests
+from flask import Flask, jsonify, render_template, request
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Flask app
-app = Flask(__name__, template_folder='templates', static_folder='static')
+app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# Configuration
-API_BASE_URL = os.getenv('API_BASE_URL', 'http://vanna-app:8000')
+API_BASE_URL = os.getenv("API_BASE_URL", "http://jeen-insights-api:8000")
 
 
-@app.route('/')
+# ----------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------
+def _proxy_get(path: str, params: Dict[str, Any] | None = None, timeout: float = 30) -> Any:
+    try:
+        response = requests.get(f"{API_BASE_URL}{path}", params=params, timeout=timeout)
+    except requests.exceptions.RequestException as e:
+        logger.error("Backend GET %s failed: %s", path, e)
+        return jsonify({"error": f"Backend unavailable: {e}"}), 503
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({"error": response.text}), response.status_code
+
+
+def _proxy_post(path: str, payload: Dict[str, Any], timeout: float = 60) -> Any:
+    try:
+        response = requests.post(f"{API_BASE_URL}{path}", json=payload, timeout=timeout)
+    except requests.exceptions.RequestException as e:
+        logger.error("Backend POST %s failed: %s", path, e)
+        return jsonify({"error": f"Backend unavailable: {e}"}), 503
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({"error": response.text}), response.status_code
+
+
+# ----------------------------------------------------------------------
+# Pages
+# ----------------------------------------------------------------------
+@app.route("/")
 def index():
-    """Render the main UI page."""
-    return render_template('index.html')
+    return render_template("index.html")
 
 
-@app.route('/api/ask', methods=['POST'])
-def ask_question():
-    """
-    Forward question to the Vanna API backend.
-    
-    Returns:
-        JSON response with SQL, results, and explanation
-    """
-    try:
-        data = request.get_json()
-        question = data.get('question', '').strip()
-        session_id = data.get('session_id')  # Get session_id if provided
-        
-        if not question:
-            return jsonify({'error': 'Question cannot be empty'}), 400
-        
-        logger.info(f"Forwarding question to API: {question} (session_id: {session_id})")
-        
-        # Call the FastAPI backend
-        payload = {'question': question}
-        if session_id:
-            payload['session_id'] = session_id
-        
-        response = requests.post(
-            f'{API_BASE_URL}/api/query',
-            json=payload,
-            timeout=60
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            has_prompt = 'prompt' in result
-            prompt_length = len(result.get('prompt', '')) if has_prompt else 0
-            logger.info(f"Received response from API - Has prompt: {has_prompt}, Prompt length: {prompt_length}")
-            return jsonify(result)
-        else:
-            logger.error(f"API error: {response.status_code} - {response.text}")
-            return jsonify({
-                'error': f'API error: {response.status_code}',
-                'details': response.text
-            }), response.status_code
-            
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request error: {e}")
-        return jsonify({'error': f'Failed to connect to API: {str(e)}'}), 503
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/tables', methods=['GET'])
-def get_tables():
-    """Get list of available tables."""
-    try:
-        response = requests.get(f'{API_BASE_URL}/api/tables', timeout=10)
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            return jsonify({'error': 'Failed to fetch tables'}), response.status_code
-    except Exception as e:
-        logger.error(f"Error fetching tables: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/schema/<table_name>', methods=['GET'])
-def get_schema(table_name: str):
-    """Get schema for a specific table."""
-    try:
-        response = requests.get(f'{API_BASE_URL}/api/schema/{table_name}', timeout=10)
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            return jsonify({'error': f'Failed to fetch schema for {table_name}'}), response.status_code
-    except Exception as e:
-        logger.error(f"Error fetching schema: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/user/recent-questions', methods=['GET'])
-def get_recent_questions():
-    """Get user's recent questions from conversation history."""
-    try:
-        user_id = request.args.get('user_id', 'default')
-        limit = request.args.get('limit', '15')
-        
-        response = requests.get(
-            f'{API_BASE_URL}/api/user/recent-questions',
-            params={'user_id': user_id, 'limit': limit},
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            return jsonify({'error': 'Failed to fetch recent questions'}), response.status_code
-    except Exception as e:
-        logger.error(f"Error fetching recent questions: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/user/pinned-questions', methods=['GET'])
-def get_pinned_questions():
-    """Get user's pinned questions."""
-    try:
-        user_id = request.args.get('user_id', 'default')
-        
-        response = requests.get(
-            f'{API_BASE_URL}/api/user/pinned-questions',
-            params={'user_id': user_id},
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            return jsonify({'error': 'Failed to fetch pinned questions'}), response.status_code
-    except Exception as e:
-        logger.error(f"Error fetching pinned questions: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/user/pin-question', methods=['POST'])
-def pin_question():
-    """Pin a question for the user."""
-    try:
-        data = request.get_json()
-        
-        response = requests.post(
-            f'{API_BASE_URL}/api/user/pin-question',
-            json=data,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            return jsonify({'error': 'Failed to pin question'}), response.status_code
-    except Exception as e:
-        logger.error(f"Error pinning question: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/user/unpin-question', methods=['POST'])
-def unpin_question():
-    """Unpin a question for the user."""
-    try:
-        data = request.get_json()
-        
-        response = requests.post(
-            f'{API_BASE_URL}/api/user/unpin-question',
-            json=data,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            return jsonify({'error': 'Failed to unpin question'}), response.status_code
-    except Exception as e:
-        logger.error(f"Error unpinning question: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/generate-chart', methods=['POST'])
-def generate_chart():
-    """
-    Generate chart configuration using LLM.
-    LLM decides chart type and creates ECharts JSON.
-    
-    Request:
-        columns: List of column info with name and type
-        column_names: List of column names
-        sample_data: Sample data rows (first 10)
-        all_data: All data if dataset is small
-    
-    Returns:
-        chart_config: ECharts configuration JSON
-        chart_type: Type of chart chosen by LLM
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        logger.info(f"Generating chart with LLM for {len(data.get('column_names', []))} columns")
-        
-        # Forward to the main API backend for LLM chart generation
-        response = requests.post(
-            f'{API_BASE_URL}/api/generate-chart',
-            json=data,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            logger.info('Chart generation successful')
-            return jsonify(result)
-        else:
-            logger.error(f"Chart generation API error: {response.status_code}")
-            return jsonify({
-                'error': f'Chart generation service unavailable: {response.status_code}'
-            }), 503
-            
-    except requests.exceptions.Timeout:
-        logger.error('Chart generation request timed out')
-        return jsonify({'error': 'Chart generation request timed out'}), 504
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Chart generation request error: {e}")
-        return jsonify({'error': f'Failed to connect to chart generation service: {str(e)}'}), 503
-    except Exception as e:
-        logger.error(f"Unexpected error in chart generation: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/generate-insights', methods=['POST'])
-def generate_insights_endpoint():
-    """
-    Generate insights for query results using LLM.
-    
-    Request:
-        dataset: Query results (dict with 'rows' and 'columns')
-        question: Original user question
-    
-    Returns:
-        insights: Dict with 'summary', 'findings', 'suggestions'
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        logger.info(f"Generating insights for question: {data.get('question', 'N/A')[:50]}...")
-        
-        # Forward to the main API backend for LLM insight generation
-        response = requests.post(
-            f'{API_BASE_URL}/api/generate-insights',
-            json=data,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            logger.info('Insights generation successful')
-            return jsonify(result)
-        else:
-            logger.error(f"Insights API error: {response.status_code}")
-            return jsonify({
-                'error': f'Insights service unavailable: {response.status_code}'
-            }), 503
-            
-    except requests.exceptions.Timeout:
-        logger.error('Insights request timed out')
-        return jsonify({'error': 'Insights request timed out'}), 504
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Insights request error: {e}")
-        return jsonify({'error': f'Failed to connect to insights service: {str(e)}'}), 503
-    except Exception as e:
-        logger.error(f"Unexpected error in insights generation: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/generate-profile', methods=['POST'])
-def generate_profile_endpoint():
-    """
-    Generate data profiling report using ydata-profiling or Sweetviz.
-    
-    Request:
-        dataset: Query results (dict with 'rows' and 'columns')
-        report_type: 'ydata' or 'sweetviz' (default: 'ydata')
-    
-    Returns:
-        html: HTML string containing the full profile report
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        report_type = data.get('report_type', 'ydata')
-        logger.info(f'Generating data profile report using: {report_type}')
-        
-        # Forward to the main API backend for profiling
-        response = requests.post(
-            f'{API_BASE_URL}/api/generate-profile',
-            json=data,
-            timeout=120  # Profiling can take longer for large datasets
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            logger.info('Profile report generated successfully')
-            return jsonify(result)
-        else:
-            logger.error(f"Profile API error: {response.status_code}")
-            return jsonify({
-                'error': f'Profile service unavailable: {response.status_code}'
-            }), 503
-            
-    except requests.exceptions.Timeout:
-        logger.error('Profile request timed out')
-        return jsonify({'error': 'Profile generation timed out. Try with a smaller dataset.'}), 504
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Profile request error: {e}")
-        return jsonify({'error': f'Failed to connect to profile service: {str(e)}'}), 503
-    except Exception as e:
-        logger.error(f"Unexpected error in profile generation: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/enhance-chart', methods=['POST'])
-def enhance_chart():
-    """
-    Enhance chart configuration using LLM.
-    
-    Request:
-        columns: List of column info with name and type
-        sample_data: Sample data rows (first 10)
-        chart_type: Type of chart (line/bar/pie)
-        current_config: Current basic chart config
-    
-    Returns:
-        enhanced_config: Enhanced ECharts configuration
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        logger.info(f"Enhancing chart: type={data.get('chart_type')}")
-        
-        # Forward to the main API backend for LLM enhancement
-        # Note: This endpoint needs to be implemented in the main Vanna API
-        response = requests.post(
-            f'{API_BASE_URL}/api/enhance-chart',
-            json=data,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            logger.info('Chart enhancement successful')
-            return jsonify(result)
-        else:
-            logger.error(f"Chart enhancement API error: {response.status_code}")
-            # Fallback: return error so frontend uses Tier 1 config
-            return jsonify({
-                'error': f'Enhancement service unavailable: {response.status_code}'
-            }), 503
-            
-    except requests.exceptions.Timeout:
-        logger.error('Chart enhancement request timed out')
-        return jsonify({'error': 'Enhancement request timed out'}), 504
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Chart enhancement request error: {e}")
-        return jsonify({'error': f'Failed to connect to enhancement service: {str(e)}'}), 503
-    except Exception as e:
-        logger.error(f"Unexpected error in chart enhancement: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/health')
+@app.route("/health")
 def health():
-    """Health check endpoint."""
     try:
-        response = requests.get(f'{API_BASE_URL}/health', timeout=5)
-        backend_status = response.json() if response.status_code == 200 else {'status': 'unhealthy'}
-        
-        return jsonify({
-            'ui_status': 'healthy',
-            'backend_status': backend_status
-        })
-    except Exception as e:
-        return jsonify({
-            'ui_status': 'healthy',
-            'backend_status': {'status': 'unhealthy', 'error': str(e)}
-        })
+        response = requests.get(f"{API_BASE_URL}/health", timeout=5)
+        backend_status = response.json() if response.status_code == 200 else {"status": "unhealthy"}
+    except Exception as e:  # noqa: BLE001
+        backend_status = {"status": "unhealthy", "error": str(e)}
+    return jsonify({"ui_status": "healthy", "backend_status": backend_status})
 
 
-if __name__ == '__main__':
-    port = int(os.getenv('UI_PORT', 8501))
-    app.run(host='0.0.0.0', port=port, debug=True)
+# ----------------------------------------------------------------------
+# Connections
+# ----------------------------------------------------------------------
+@app.route("/api/connections", methods=["GET"])
+def list_connections():
+    return _proxy_get("/api/connections", timeout=15)
+
+
+@app.route("/api/connections/<source_key>", methods=["GET"])
+def get_connection(source_key: str):
+    return _proxy_get(f"/api/connections/{source_key}", timeout=15)
+
+
+@app.route("/api/connections/<source_key>/refresh-metadata", methods=["POST"])
+def refresh_metadata(source_key: str):
+    return _proxy_post(f"/api/connections/{source_key}/refresh-metadata", payload={}, timeout=15)
+
+
+# ----------------------------------------------------------------------
+# Query / data exploration
+# ----------------------------------------------------------------------
+@app.route("/api/ask", methods=["POST"])
+def ask_question():
+    data = request.get_json() or {}
+    question = (data.get("question") or "").strip()
+    connection = data.get("connection")
+    session_id = data.get("session_id")
+
+    if not question:
+        return jsonify({"error": "Question cannot be empty"}), 400
+    if not connection:
+        return jsonify({"error": "No connection selected"}), 400
+
+    payload: Dict[str, Any] = {"question": question, "connection": connection}
+    if session_id:
+        payload["session_id"] = session_id
+    return _proxy_post("/api/query", payload, timeout=120)
+
+
+@app.route("/api/tables", methods=["GET"])
+def get_tables():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_get("/api/tables", params={"connection": connection}, timeout=15)
+
+
+@app.route("/api/schema/<table_name>", methods=["GET"])
+def get_schema(table_name: str):
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_get(f"/api/schema/{table_name}", params={"connection": connection}, timeout=15)
+
+
+# ----------------------------------------------------------------------
+# Recent / pinned questions
+# ----------------------------------------------------------------------
+@app.route("/api/user/recent-questions", methods=["GET"])
+def get_recent_questions():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"questions": []})
+    return _proxy_get(
+        "/api/user/recent-questions",
+        params={
+            "connection": connection,
+            "user_id": request.args.get("user_id", "default"),
+            "limit": request.args.get("limit", "15"),
+        },
+    )
+
+
+@app.route("/api/user/pinned-questions", methods=["GET"])
+def get_pinned_questions():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"questions": []})
+    return _proxy_get(
+        "/api/user/pinned-questions",
+        params={
+            "connection": connection,
+            "user_id": request.args.get("user_id", "default"),
+        },
+    )
+
+
+@app.route("/api/user/pin-question", methods=["POST"])
+def pin_question():
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_post("/api/user/pin-question", data)
+
+
+@app.route("/api/user/unpin-question", methods=["POST"])
+def unpin_question():
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_post("/api/user/unpin-question", data)
+
+
+# ----------------------------------------------------------------------
+# Insights / charts / profile
+# ----------------------------------------------------------------------
+@app.route("/api/generate-chart", methods=["POST"])
+def generate_chart():
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_post("/api/generate-chart", data)
+
+
+@app.route("/api/generate-insights", methods=["POST"])
+def generate_insights():
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_post("/api/generate-insights", data)
+
+
+@app.route("/api/generate-profile", methods=["POST"])
+def generate_profile():
+    data = request.get_json() or {}
+    return _proxy_post("/api/generate-profile", data, timeout=120)
+
+
+@app.route("/api/enhance-chart", methods=["POST"])
+def enhance_chart():
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_post("/api/enhance-chart", data)
+
+
+# ----------------------------------------------------------------------
+# Autocomplete (Tier 2 catalog + Tier 3 LLM)
+# ----------------------------------------------------------------------
+@app.route("/api/knowledge-questions", methods=["GET"])
+def get_knowledge_questions():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_get(
+        "/api/knowledge-questions",
+        params={"connection": connection},
+        timeout=15,
+    )
+
+
+@app.route("/api/knowledge-columns", methods=["GET"])
+def get_knowledge_columns():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"error": "No connection selected"}), 400
+    params = {"connection": connection}
+    table = request.args.get("table")
+    if table:
+        params["table"] = table
+    return _proxy_get(
+        "/api/knowledge-columns",
+        params=params,
+        timeout=15,
+    )
+
+
+@app.route("/api/suggest-questions", methods=["POST"])
+def suggest_questions():
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_post("/api/suggest-questions", data, timeout=15)
+
+
+# ----------------------------------------------------------------------
+# Feedback / history
+# ----------------------------------------------------------------------
+@app.route("/api/feedback", methods=["POST"])
+def submit_feedback():
+    return _proxy_post("/api/feedback", request.get_json() or {})
+
+
+@app.route("/api/conversation/<session_id>", methods=["GET"])
+def get_conversation_history(session_id: str):
+    return _proxy_get(f"/api/conversation/{session_id}", timeout=30)
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("UI_PORT", "8501"))
+    app.run(host="0.0.0.0", port=port, debug=True)

@@ -1,146 +1,120 @@
-"""Conversation history service for tracking text-to-SQL query lifecycle."""
+"""Conversation history service for Jeen Insights.
+
+Tracks the complete query lifecycle (input -> LLM -> execution -> insights ->
+feedback) in the shared metadata DB. Every row is partitioned by `source_key`
+(the active connection) so multiple connections can share the same DB.
+
+Backed by:
+  * insights_conversation_sessions
+  * insights_query_insights
+  * insights_pinned_questions
+  * insights_get_next_sequence_number(session_id)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Dict, List, Optional
+from uuid import UUID, uuid4
 
 import asyncpg
-import logging
-import json
-from typing import Dict, Any, List, Optional
-from uuid import UUID, uuid4
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
 class ConversationHistoryService:
+    """Reads/writes Jeen Insights operational tables.
+
+    The pool is shared with `MetadataLoader` and `ConnectionService` (it points
+    at METADATA_DB_*). Pass it in via the constructor.
     """
-    Tracks complete query lifecycle: input → LLM → execution → insights → feedback.
-    Enables conversation context, debugging, analytics, and ML training data.
-    """
-    
-    def __init__(self, connection_string: str):
-        """
-        Initialize conversation history service.
-        
-        Args:
-            connection_string: PostgreSQL connection string to history database
-        """
-        self.connection_string = connection_string
-        self.pool: Optional[asyncpg.Pool] = None
-    
-    async def initialize(self):
-        """Initialize database connection pool."""
-        try:
-            self.pool = await asyncpg.create_pool(
-                self.connection_string,
-                min_size=2,
-                max_size=10
-            )
-            logger.info("✅ Conversation history service initialized")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize conversation history: {e}")
-            raise
-    
-    async def close(self):
-        """Close database connection pool."""
-        if self.pool:
-            await self.pool.close()
-            logger.info("👋 Conversation history service closed")
-    
+
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def initialize(self) -> None:
+        # Pool is already initialized by `get_metadata_pool()`. This method is
+        # retained for API compatibility with the previous code.
+        return None
+
+    async def close(self) -> None:
+        # Pool lifecycle is managed by `close_metadata_pool()`. No-op here.
+        return None
+
+    # ------------------------------------------------------------------
+    # Sequence helper
+    # ------------------------------------------------------------------
     async def get_next_sequence_number(self, session_id: UUID) -> int:
-        """
-        Get next sequence number for a session.
-        
-        Args:
-            session_id: Session UUID
-            
-        Returns:
-            Next sequence number (1, 2, 3, ...)
-        """
         async with self.pool.acquire() as conn:
             result = await conn.fetchval(
-                "SELECT get_next_sequence_number($1)",
-                session_id
+                "SELECT insights_get_next_sequence_number($1)", session_id
             )
-            return result
-    
+            return int(result or 1)
+
+    # ------------------------------------------------------------------
+    # Query lifecycle
+    # ------------------------------------------------------------------
     async def log_query(
         self,
+        *,
         user_id: str,
+        source_key: str,
         session_id: UUID,
         natural_language_query: str,
         dataset_id: Optional[str] = None,
         schema_context: Optional[Dict[str, Any]] = None,
         rag_context: Optional[Dict[str, Any]] = None,
-        parent_query_id: Optional[UUID] = None
+        parent_query_id: Optional[UUID] = None,
     ) -> UUID:
-        """
-        Log initial query submission.
-        
-        Args:
-            user_id: User identifier
-            session_id: Session UUID for conversation grouping
-            natural_language_query: User's question
-            dataset_id: Which database/dataset
-            schema_context: Snapshot of available tables/columns
-            rag_context: RAG retrieval metadata (ddl_count, examples_count, scores)
-            parent_query_id: Reference to previous query if follow-up
-            
-        Returns:
-            query_id: UUID of the created query record
-        """
         try:
             sequence_number = await self.get_next_sequence_number(session_id)
-            
             async with self.pool.acquire() as conn:
                 query_id = await conn.fetchval(
                     """
-                    INSERT INTO txt2sql_conversation_sessions (
-                        user_id, session_id, sequence_number, parent_query_id,
+                    INSERT INTO insights_conversation_sessions (
+                        user_id, source_key, session_id, sequence_number, parent_query_id,
                         natural_language_query, dataset_id, schema_context, rag_context,
                         execution_status
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
                     RETURNING id
                     """,
                     user_id,
+                    source_key,
                     session_id,
                     sequence_number,
                     parent_query_id,
                     natural_language_query,
                     dataset_id,
                     json.dumps(schema_context) if schema_context else None,
-                    json.dumps(rag_context) if rag_context else None
+                    json.dumps(rag_context) if rag_context else None,
                 )
-                
-                logger.info(f"📝 Logged query {query_id} for session {session_id} (seq {sequence_number})")
+                logger.info(
+                    "📝 Logged query %s for session %s (seq %s, source=%s)",
+                    query_id,
+                    session_id,
+                    sequence_number,
+                    source_key,
+                )
                 return query_id
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to log query: {e}", exc_info=True)
-            # Return a dummy UUID so flow continues
+        except Exception:
+            logger.exception("Failed to log query")
             return uuid4()
-    
+
     async def update_llm_response(
         self,
+        *,
         query_id: UUID,
         generated_sql: Optional[str],
         llm_model: str,
         llm_latency_ms: int,
-        tokens_used: int
-    ):
-        """
-        Update query record with LLM generation results.
-        
-        Args:
-            query_id: Query UUID
-            generated_sql: SQL generated by LLM
-            llm_model: Model name (e.g., "gpt-4")
-            llm_latency_ms: LLM response time
-            tokens_used: Total tokens consumed
-        """
+        tokens_used: int,
+    ) -> None:
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """
-                    UPDATE txt2sql_conversation_sessions
+                    UPDATE insights_conversation_sessions
                     SET generated_sql = $1,
                         llm_model = $2,
                         llm_latency_ms = $3,
@@ -151,42 +125,28 @@ class ConversationHistoryService:
                     llm_model,
                     llm_latency_ms,
                     tokens_used,
-                    query_id
+                    query_id,
                 )
-                logger.debug(f"Updated LLM response for query {query_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to update LLM response: {e}")
-    
+        except Exception:
+            logger.exception("Failed to update LLM response")
+
     async def update_execution(
         self,
+        *,
         query_id: UUID,
         execution_status: str,
         execution_time_ms: Optional[int] = None,
         row_count: Optional[int] = None,
         result_preview: Optional[List[Dict[str, Any]]] = None,
-        error_message: Optional[str] = None
-    ):
-        """
-        Update query record with SQL execution results.
-        
-        Args:
-            query_id: Query UUID
-            execution_status: 'success', 'error', 'timeout', 'syntax_error'
-            execution_time_ms: SQL execution time
-            row_count: Number of rows returned
-            result_preview: First 10 rows for reference
-            error_message: Error details if failed
-        """
+        error_message: Optional[str] = None,
+    ) -> None:
         try:
-            # Limit result preview to first 10 rows
             if result_preview and len(result_preview) > 10:
                 result_preview = result_preview[:10]
-            
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """
-                    UPDATE txt2sql_conversation_sessions
+                    UPDATE insights_conversation_sessions
                     SET execution_status = $1,
                         execution_time_ms = $2,
                         row_count = $3,
@@ -199,15 +159,17 @@ class ConversationHistoryService:
                     row_count,
                     json.dumps(result_preview) if result_preview else None,
                     error_message,
-                    query_id
+                    query_id,
                 )
-                logger.debug(f"Updated execution results for query {query_id}: {execution_status}")
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to update execution: {e}")
-    
+        except Exception:
+            logger.exception("Failed to update execution")
+
+    # ------------------------------------------------------------------
+    # Insights
+    # ------------------------------------------------------------------
     async def add_insight(
         self,
+        *,
         query_id: UUID,
         insight_type: str,
         content: str,
@@ -215,29 +177,13 @@ class ConversationHistoryService:
         llm_model: Optional[str] = None,
         llm_execution_time_ms: Optional[int] = None,
         tokens_input: Optional[int] = None,
-        tokens_output: Optional[int] = None
+        tokens_output: Optional[int] = None,
     ) -> UUID:
-        """
-        Add an insight for a query.
-        
-        Args:
-            query_id: Query UUID
-            insight_type: 'summary', 'finding', 'suggestion', 'chart', 'anomaly'
-            content: Insight text
-            metadata: Additional structured data (chart configs, etc.)
-            llm_model: Model used for insight generation
-            llm_execution_time_ms: Time taken to generate insight
-            tokens_input: Input tokens
-            tokens_output: Output tokens
-            
-        Returns:
-            insight_id: UUID of created insight
-        """
         try:
             async with self.pool.acquire() as conn:
                 insight_id = await conn.fetchval(
                     """
-                    INSERT INTO txt2sql_query_insights (
+                    INSERT INTO insights_query_insights (
                         query_id, insight_type, content, metadata,
                         llm_model, llm_execution_time_ms, tokens_input, tokens_output
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -250,36 +196,29 @@ class ConversationHistoryService:
                     llm_model,
                     llm_execution_time_ms,
                     tokens_input,
-                    tokens_output
+                    tokens_output,
                 )
-                logger.debug(f"Added {insight_type} insight {insight_id} for query {query_id}")
                 return insight_id
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to add insight: {e}")
+        except Exception:
+            logger.exception("Failed to add insight")
             return uuid4()
-    
+
+    # ------------------------------------------------------------------
+    # Feedback
+    # ------------------------------------------------------------------
     async def record_feedback(
         self,
+        *,
         query_id: UUID,
         user_feedback: str,
         corrected_sql: Optional[str] = None,
-        feedback_notes: Optional[str] = None
-    ):
-        """
-        Record user feedback for a query.
-        
-        Args:
-            query_id: Query UUID
-            user_feedback: 'thumbs_up', 'thumbs_down', 'edited'
-            corrected_sql: User's corrected SQL if edited
-            feedback_notes: Optional free-text notes
-        """
+        feedback_notes: Optional[str] = None,
+    ) -> None:
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """
-                    UPDATE txt2sql_conversation_sessions
+                    UPDATE insights_conversation_sessions
                     SET user_feedback = $1,
                         corrected_sql = $2,
                         feedback_notes = $3
@@ -288,243 +227,184 @@ class ConversationHistoryService:
                     user_feedback,
                     corrected_sql,
                     feedback_notes,
-                    query_id
+                    query_id,
                 )
-                logger.info(f"👍👎 Recorded {user_feedback} feedback for query {query_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to record feedback: {e}")
-    
+        except Exception:
+            logger.exception("Failed to record feedback")
+
+    # ------------------------------------------------------------------
+    # Read APIs
+    # ------------------------------------------------------------------
     async def get_conversation_context(
         self,
+        *,
         session_id: UUID,
-        limit: int = 5
+        limit: int = 5,
     ) -> List[Dict[str, Any]]:
-        """
-        Get recent conversation history for context.
-        
-        Args:
-            session_id: Session UUID
-            limit: Number of recent queries to retrieve
-            
-        Returns:
-            List of query dictionaries with sequence_number, query, sql, status
-        """
         try:
             async with self.pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT 
-                        sequence_number,
-                        natural_language_query,
-                        generated_sql,
-                        execution_status,
-                        created_at
-                    FROM txt2sql_conversation_sessions
+                    SELECT sequence_number, natural_language_query, generated_sql,
+                           execution_status, created_at
+                    FROM insights_conversation_sessions
                     WHERE session_id = $1
                     ORDER BY sequence_number DESC
                     LIMIT $2
                     """,
                     session_id,
-                    limit
+                    limit,
                 )
-                
-                return [dict(row) for row in rows]
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to get conversation context: {e}")
+                return [dict(r) for r in rows]
+        except Exception:
+            logger.exception("Failed to get conversation context")
             return []
-    
+
     async def get_conversation_history(
         self,
+        *,
         session_id: UUID,
-        include_insights: bool = True
+        include_insights: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Get complete conversation history with optional insights.
-        
-        Args:
-            session_id: Session UUID
-            include_insights: Whether to include insights for each query
-            
-        Returns:
-            Dict with session metadata and queries list
-        """
         try:
             async with self.pool.acquire() as conn:
-                # Get all queries in session
                 queries = await conn.fetch(
                     """
                     SELECT *
-                    FROM txt2sql_conversation_sessions
+                    FROM insights_conversation_sessions
                     WHERE session_id = $1
                     ORDER BY sequence_number ASC
                     """,
-                    session_id
+                    session_id,
                 )
-                
-                queries_list = []
-                for query in queries:
-                    query_dict = dict(query)
-                    
-                    # Get insights if requested
+                queries_list: List[Dict[str, Any]] = []
+                for q in queries:
+                    qd = dict(q)
                     if include_insights:
-                        insights = await conn.fetch(
+                        ins = await conn.fetch(
                             """
-                            SELECT insight_type, content, metadata, 
+                            SELECT insight_type, content, metadata,
                                    llm_model, llm_execution_time_ms,
-                                   tokens_input, tokens_output
-                            FROM txt2sql_query_insights
+                                   tokens_input, tokens_output, created_at
+                            FROM insights_query_insights
                             WHERE query_id = $1
                             ORDER BY created_at ASC
                             """,
-                            query_dict['id']
+                            qd["id"],
                         )
-                        query_dict['insights'] = [dict(ins) for ins in insights]
-                    
-                    queries_list.append(query_dict)
-                
+                        qd["insights"] = [dict(i) for i in ins]
+                    queries_list.append(qd)
                 return {
-                    "session_id": session_id,
+                    "session_id": str(session_id),
                     "query_count": len(queries_list),
-                    "queries": queries_list
+                    "queries": queries_list,
                 }
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to get conversation history: {e}")
-            return {"session_id": session_id, "query_count": 0, "queries": []}
-    
+        except Exception:
+            logger.exception("Failed to get conversation history")
+            return {"session_id": str(session_id), "query_count": 0, "queries": []}
+
+    # ------------------------------------------------------------------
+    # Recent / pinned questions (per user + connection)
+    # ------------------------------------------------------------------
     async def get_user_recent_questions(
         self,
+        *,
         user_id: str,
-        limit: int = 15
+        source_key: str,
+        limit: int = 15,
     ) -> List[str]:
-        """
-        Get recent distinct questions for a user, excluding pinned questions.
-        
-        Args:
-            user_id: User identifier
-            limit: Maximum number of questions to return
-            
-        Returns:
-            List of recent distinct questions (excluding pinned ones)
-        """
         try:
             async with self.pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT natural_language_query, MAX(created_at) as last_asked
-                    FROM txt2sql_conversation_sessions
+                    SELECT natural_language_query, MAX(created_at) AS last_asked
+                    FROM insights_conversation_sessions
                     WHERE user_id = $1
-                    AND natural_language_query NOT IN (
-                        SELECT question FROM user_pinned_questions WHERE user_id = $1
-                    )
+                      AND source_key = $2
+                      AND natural_language_query NOT IN (
+                        SELECT question
+                        FROM insights_pinned_questions
+                        WHERE user_id = $1 AND source_key = $2
+                      )
                     GROUP BY natural_language_query
                     ORDER BY last_asked DESC
-                    LIMIT $2
+                    LIMIT $3
                     """,
                     user_id,
-                    limit
+                    source_key,
+                    limit,
                 )
-                
-                return [row['natural_language_query'] for row in rows]
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to get user recent questions: {e}")
+                return [r["natural_language_query"] for r in rows]
+        except Exception:
+            logger.exception("Failed to get user recent questions")
             return []
-    
+
     async def get_user_pinned_questions(
         self,
-        user_id: str
+        *,
+        user_id: str,
+        source_key: str,
     ) -> List[str]:
-        """
-        Get pinned questions for a user.
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            List of pinned questions ordered by pin time (newest first)
-        """
         try:
             async with self.pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
                     SELECT question
-                    FROM user_pinned_questions
-                    WHERE user_id = $1
+                    FROM insights_pinned_questions
+                    WHERE user_id = $1 AND source_key = $2
                     ORDER BY pinned_at DESC
                     """,
-                    user_id
+                    user_id,
+                    source_key,
                 )
-                
-                return [row['question'] for row in rows]
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to get pinned questions: {e}")
+                return [r["question"] for r in rows]
+        except Exception:
+            logger.exception("Failed to get user pinned questions")
             return []
-    
+
     async def pin_question(
         self,
+        *,
         user_id: str,
-        question: str
+        source_key: str,
+        question: str,
     ) -> bool:
-        """
-        Pin a question for a user.
-        
-        Args:
-            user_id: User identifier
-            question: Question text to pin
-            
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """
-                    INSERT INTO user_pinned_questions (user_id, question)
-                    VALUES ($1, $2)
-                    ON CONFLICT (user_id, question) DO NOTHING
+                    INSERT INTO insights_pinned_questions (user_id, source_key, question)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (user_id, source_key, question) DO NOTHING
                     """,
                     user_id,
-                    question
+                    source_key,
+                    question,
                 )
-                logger.info(f"📌 Pinned question for user {user_id}")
                 return True
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to pin question: {e}")
+        except Exception:
+            logger.exception("Failed to pin question")
             return False
-    
+
     async def unpin_question(
         self,
+        *,
         user_id: str,
-        question: str
+        source_key: str,
+        question: str,
     ) -> bool:
-        """
-        Unpin a question for a user.
-        
-        Args:
-            user_id: User identifier
-            question: Question text to unpin
-            
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """
-                    DELETE FROM user_pinned_questions
-                    WHERE user_id = $1 AND question = $2
+                    DELETE FROM insights_pinned_questions
+                    WHERE user_id = $1 AND source_key = $2 AND question = $3
                     """,
                     user_id,
-                    question
+                    source_key,
+                    question,
                 )
-                logger.info(f"📍 Unpinned question for user {user_id}")
                 return True
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to unpin question: {e}")
+        except Exception:
+            logger.exception("Failed to unpin question")
             return False

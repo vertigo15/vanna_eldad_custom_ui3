@@ -1,4 +1,5 @@
-# Agent components
-from .insight_service import generate_insights, generate_insights_async
+"""Jeen Insights agent package."""
 
-__all__ = ['generate_insights', 'generate_insights_async']
+from .jeen_insights_agent import AgentRegistry, JeenInsightsAgent
+
+__all__ = ["AgentRegistry", "JeenInsightsAgent"]

@@ -24,12 +24,16 @@ export async function enhanceChart(request) {
     });
     
     try {
+        const connection = (typeof window !== 'undefined' && typeof window.getActiveConnection === 'function')
+            ? window.getActiveConnection()
+            : (typeof localStorage !== 'undefined' ? (localStorage.getItem('jeen_insights_connection') || '') : '');
+        const requestWithConnection = { ...request, connection };
         const response = await fetch('/api/enhance-chart', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(request),
+            body: JSON.stringify(requestWithConnection),
             signal: AbortSignal.timeout(30000) // 30 second timeout
         });
         

@@ -1,72 +1,180 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
+    <!-- Anti-FOUC: read theme preference before any render -->
+    <script>
+      (function () {
+        var stored = localStorage.getItem('theme');
+        var system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', stored || system);
+        document.documentElement.classList.add('no-transitions');
+      })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text to SQL - Data Analytics</title>
+    <title>Jeen Insights — Data Analytics</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Geist fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20">
+    <!-- CodeMirror 6 via ESM — exposes window.CodeMirrorService -->
+    <script type="module">
+      import { EditorView, lineNumbers } from 'https://esm.sh/@codemirror/view@6';
+      import { EditorState } from 'https://esm.sh/@codemirror/state@6';
+      import { sql } from 'https://esm.sh/@codemirror/lang-sql@6';
+      import { oneDark } from 'https://esm.sh/@codemirror/theme-one-dark@6';
+      window.CodeMirrorService = { EditorView, EditorState, lineNumbers, sql, oneDark, ready: true };
+      window.dispatchEvent(new Event('codemirror-ready'));
+    </script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🤖 Text to SQL</h1>
-            <p class="subtitle">Ask questions about your data in natural language</p>
-        </header>
+<div class="app-layout">
 
-        <main>
-            <div class="content-area">
-                <div class="query-section">
-                    <div class="input-group">
-                        <textarea 
-                            id="question-input" 
-                            placeholder="Ask a question about your database (e.g., 'Show me total sales by product category')"
-                            rows="3"
+    <!-- ── Topbar ─────────────────────────────────────────── -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <button class="sidebar-toggle-btn" id="sidebar-toggle" aria-label="Toggle sidebar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+            </button>
+            <span class="topbar-title" id="page-title">New query</span>
+        </div>
+        <div class="topbar-actions">
+            <button class="topbar-icon-btn" id="history-btn" aria-label="History" title="History">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            <button class="topbar-icon-btn" id="settings-btn" aria-label="Settings" title="Settings">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            <button class="theme-toggle btn-icon" id="theme-toggle" aria-label="Switch to dark mode">
+                <span class="theme-icon" id="theme-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                </span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ── Sidebar overlay (mobile) ──────────────────────── -->
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
+    <!-- ── Body (sidebar + main) ─────────────────────────── -->
+    <div class="layout-body">
+
+        <!-- Left Sidebar -->
+        <aside class="sidebar" id="sidebar" aria-label="Navigation panel">
+
+            <!-- Sidebar header: brand + connection pill -->
+            <div class="sidebar-header">
+                <div class="sidebar-brand">
+                    <span class="sidebar-brand-text">Jeen Insights</span>
+                </div>
+                <div class="connection-pill-wrap">
+                    <span class="connection-status-dot" id="connection-status-dot" data-status="connecting" aria-hidden="true"></span>
+                    <span class="connection-pill-name" id="connection-pill-name">Loading…</span>
+                    <svg class="connection-pill-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                    <select id="connection-select" class="connection-select-overlay" onchange="onConnectionChange()" aria-label="Active connection">
+                        <option value="">Loading…</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-header">
+                    <h3>Tables</h3>
+                    <button class="refresh-btn" onclick="loadTables()" aria-label="Refresh tables" title="Refresh">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><polyline points="21 3 21 8 16 8"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><polyline points="3 21 3 16 8 16"/></svg>
+                    </button>
+                </div>
+                <input
+                    type="text"
+                    id="table-search"
+                    class="table-search-input"
+                    placeholder="Search tables…"
+                    onkeyup="filterTables()"
+                    aria-label="Search tables"
+                    style="display: none;"
+                />
+                <div id="tables-list" class="tables-list" role="list"></div>
+            </div>
+
+            <!-- Recent Questions pinned to bottom of sidebar -->
+            <div class="info-card sidebar-bottom">
+                <div class="info-card-header">
+                    <h3>Recent Questions</h3>
+                </div>
+                <div id="question-history" class="question-history" role="list"></div>
+                <button onclick="clearHistory()" class="clear-history-btn" style="display: none;" id="clear-history-btn" aria-label="Clear question history">Clear</button>
+            </div>
+
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" id="main-content">
+            <div class="main-inner">
+
+                <!-- Query card -->
+                <div class="card query-card">
+                    <div class="card-label">Ask a question</div>
+                    <div class="query-input-wrap">
+                        <textarea
+                            id="question-input"
+                            placeholder="show sales per month"
+                            rows="2"
+                            aria-label="Enter your question"
+                            aria-autocomplete="list"
+                            aria-controls="question-suggestions"
+                            aria-expanded="false"
+                            autocomplete="off"
                         ></textarea>
-                        <button id="ask-button" onclick="askQuestion()">
-                            Ask Question
+                        <button id="ask-button" class="ask-btn" onclick="askQuestion()" aria-label="Submit question">
+                            Ask <span class="ask-btn-kbd">↵</span>
                         </button>
+                        <div id="question-suggestions" class="question-suggestions" role="listbox" hidden></div>
+                    </div>
+                    <p id="suggestions-tip" class="suggestions-tip">Tip: type <code>@</code> for tables · <code>#</code> for columns · <code>/</code> for templates</p>
+
+                    <!-- Skeleton loading state -->
+                    <div id="loading" class="loading" style="display: none;" role="status" aria-label="Loading results…">
+                        <div class="skeleton" style="height: 32px; width: 100%;"></div>
+                        <div class="skeleton" style="height: 24px; width: 95%;"></div>
+                        <div class="skeleton" style="height: 24px; width: 90%;"></div>
                     </div>
 
-                    <div id="loading" class="loading" style="display: none;">
-                        <div class="spinner"></div>
-                        <p>Generating SQL and fetching results...</p>
-                    </div>
-
-                    <div id="error-message" class="error-message" style="display: none;"></div>
+                    <div id="error-message" class="error-message" style="display: none;" role="alert"></div>
                 </div>
 
+                <!-- Results section -->
                 <div id="results-section" class="results-section" style="display: none;">
-                    <div class="result-card">
-                        <h2>📝 Your Question</h2>
-                        <p id="question-display" class="question-display"></p>
-                    </div>
 
-                    <div class="result-card">
-                        <h2>📊 Results</h2>
-                        
-                        <!-- Chart Toggle -->
-                        <div id="chart-toggle-container" class="chart-toggle-wrapper"></div>
-                        
-                        <!-- Table View Actions -->
-                        <div class="results-actions">
-                            <button class="export-button" onclick="exportToExcel()" style="display: none;" id="export-btn">
-                                📄 Export to Excel
-                            </button>
-                            <button class="copy-results-button" onclick="copyResults()" style="display: none;" id="copy-results-btn">
-                                📋 Copy to Clipboard
-                            </button>
-                            <button class="describe-button" onclick="toggleDescribe()" style="display: none;" id="describe-btn">
-                                📊 Describe
-                            </button>
+                    <!-- Results card -->
+                    <div class="card results-card">
+                        <!-- Results header: title + tabs -->
+                        <div class="results-header">
+                            <div class="results-title-block">
+                                <h2 id="result-title" class="result-title">Results</h2>
+                                <p id="result-meta" class="result-meta"></p>
+                            </div>
+                            <!-- Chart Toggle (segmented control) -->
+                            <div id="chart-toggle-container" class="chart-toggle-wrapper"></div>
                         </div>
-                        
+
+                        <!-- Toolbar: filter + actions -->
+                        <div class="results-toolbar" id="results-toolbar" style="display: none;">
+                            <input type="text" id="result-filter" class="result-filter-input" placeholder="Filter results…" onkeyup="filterResults()" />
+                            <div class="toolbar-actions">
+                                <button class="toolbar-btn" onclick="exportToExcel()" style="display: none;" id="export-btn" aria-label="Export results to Excel">Export</button>
+                                <button class="toolbar-btn" onclick="copyResults()" style="display: none;" id="copy-results-btn" aria-label="Copy results to clipboard">Copy</button>
+                                <button class="toolbar-btn" onclick="toggleDescribe()" style="display: none;" id="describe-btn" aria-label="Show statistical description">Describe</button>
+                            </div>
+                        </div>
+
                         <!-- Table View -->
-                        <div id="results-display" class="results-display"></div>
-                        
+                        <div id="results-display" class="results-display" role="status" aria-live="polite" aria-atomic="true"></div>
+
                         <!-- Describe Statistics Section -->
                         <div id="describe-section" class="describe-section" style="display: none;"></div>
-                        
+
                         <!-- Chart View -->
                         <div id="chart-view-container" class="chart-view-container" style="display: none;">
                             <div id="chart-type-selector-container" class="chart-type-selector-container" style="display: none;"></div>
@@ -75,108 +183,70 @@
                     </div>
 
                     <!-- Insights Section -->
-                    <div id="insights-container" class="result-card" style="display: none;"></div>
+                    <div id="insights-container" class="card" style="display: none;"></div>
 
                     <!-- Data Profiling Section -->
-                    <div id="profiling-section" class="result-card profiling-card" style="display: none;">
-                        <div id="profiling-header" class="profiling-header" onclick="profilingManager.toggle()">
+                    <div id="profiling-section" class="card profiling-card" style="display: none;">
+                        <div id="profiling-header" class="profiling-header" onclick="profilingManager.toggle()" role="button" aria-expanded="false">
                             <h2>
                                 <span id="profiling-arrow">▶</span>
-                                📈 Data Profiling Report
+                                Data Profiling Report
                             </h2>
                         </div>
-                        <div id="profiling-content" class="profiling-content" style="display: none;">
-                            <!-- Content will be dynamically loaded -->
-                        </div>
+                        <div id="profiling-content" class="profiling-content" style="display: none;"></div>
                     </div>
 
-                    <div class="result-card" id="explanation-card" style="display: none;">
-                        <h2>💡 Explanation</h2>
+                    <div class="card" id="explanation-card" style="display: none;">
+                        <h2>Explanation</h2>
                         <p id="explanation-display" class="explanation-display"></p>
                     </div>
 
-                    <div class="result-card">
-                        <h2>💻 Prompts & SQL</h2>
-                        
+                    <div class="card">
+                        <h2>Prompts &amp; SQL</h2>
+
                         <!-- Tab Navigation -->
-                        <div class="prompt-tabs">
-                            <button class="prompt-tab active" onclick="switchPromptTab('sql')" id="tab-sql">
-                                💻 Generated SQL
-                            </button>
-                            <button class="prompt-tab" onclick="switchPromptTab('query')" id="tab-query">
-                                🧠 Query Prompt
-                            </button>
-                            <button class="prompt-tab" onclick="switchPromptTab('insights')" id="tab-insights">
-                                💡 Insights Prompt
-                            </button>
-                            <button class="prompt-tab" onclick="switchPromptTab('chart')" id="tab-chart">
-                                📊 Chart Prompt
-                            </button>
+                        <div class="prompt-tabs" role="tablist">
+                            <button class="prompt-tab active" onclick="switchPromptTab('sql')" id="tab-sql" role="tab" aria-selected="true" aria-controls="content-sql">Generated SQL</button>
+                            <button class="prompt-tab" onclick="switchPromptTab('query')" id="tab-query" role="tab" aria-selected="false" aria-controls="content-query">Query Prompt</button>
+                            <button class="prompt-tab" onclick="switchPromptTab('insights')" id="tab-insights" role="tab" aria-selected="false" aria-controls="content-insights">Insights Prompt</button>
+                            <button class="prompt-tab" onclick="switchPromptTab('chart')" id="tab-chart" role="tab" aria-selected="false" aria-controls="content-chart">Chart Prompt</button>
                         </div>
-                        
-                        <!-- Tab Contents -->
+
                         <div class="prompt-tab-content" style="display: none;">
-                            <!-- Generated SQL Tab -->
-                            <div id="content-sql" class="tab-pane active">
-                                <div class="sql-content">
-                                    <pre id="sql-display" class="sql-display"></pre>
-                                    <button class="copy-button" onclick="copySql()">Copy SQL</button>
+                            <div id="content-sql" class="tab-pane active" role="tabpanel" aria-labelledby="tab-sql">
+                                <div class="sql-editor-wrapper">
+                                    <div id="sql-editor" aria-label="Generated SQL"></div>
+                                    <button class="sql-copy-btn" onclick="copySql()" aria-label="Copy SQL to clipboard">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                                        Copy
+                                    </button>
                                 </div>
                             </div>
-                            
-                            <!-- Query Prompt Tab -->
-                            <div id="content-query" class="tab-pane" style="display: none;">
+                            <div id="content-query" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-query">
                                 <div id="prompt-content" class="prompt-content"></div>
                             </div>
-                            
-                            <!-- Insights Prompt Tab -->
-                            <div id="content-insights" class="tab-pane" style="display: none;">
+                            <div id="content-insights" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-insights">
                                 <div id="insights-prompt-content" class="prompt-content">
-                                    <p style="color: #999;">Insights prompt will be shown here when insights are generated</p>
+                                    <p style="color: var(--color-faint);">Insights prompt will appear here after insights are generated.</p>
                                 </div>
                             </div>
-                            
-                            <!-- Chart Prompt Tab -->
-                            <div id="content-chart" class="tab-pane" style="display: none;">
+                            <div id="content-chart" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-chart">
                                 <div id="chart-prompt-content" class="prompt-content">
-                                    <p style="color: #999;">Chart prompt will be shown here when a chart is generated</p>
+                                    <p style="color: var(--color-faint);">Chart prompt will appear here after a chart is generated.</p>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <div class="sidebar">
-                <div class="info-card">
-                    <h3>📚 Available Tables</h3>
-                    <button onclick="loadTables()">Load Tables</button>
-                    <input 
-                        type="text" 
-                        id="table-search" 
-                        class="table-search-input" 
-                        placeholder="Search tables..." 
-                        onkeyup="filterTables()"
-                        style="display: none;"
-                    />
-                    <div id="tables-list" class="tables-list"></div>
-                </div>
-
-                <div class="info-card">
-                    <h3>🕐 Recent Questions</h3>
-                    <div class="history-controls">
-                        <button onclick="clearHistory()" class="clear-history-btn" style="display: none;" id="clear-history-btn">
-                            Clear History
-                        </button>
-                    </div>
-                    <div id="question-history" class="question-history"></div>
-                </div>
-            </div>
+                </div><!-- /results-section -->
+            </div><!-- /main-inner -->
         </main>
-    </div>
 
-    <script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=13"></script>
-    <script src="{{ url_for('static', filename='profiling/profilingManager.js') }}"></script>
-    <script src="{{ url_for('static', filename='script.js') }}?v=13"></script>
+    </div><!-- /layout-body -->
+</div><!-- /app-layout -->
+
+<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=20"></script>
+<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=20"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=20"></script>
 </body>
 </html>

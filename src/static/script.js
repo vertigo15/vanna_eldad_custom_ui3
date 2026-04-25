@@ -17,6 +17,131 @@ let filterText = '';
 let chartManager = null;
 let insightsManager = null;
 
+// ── Connection (Jeen Insights) ──────────────────────────────
+const CONNECTION_STORAGE_KEY = 'jeen_insights_connection';
+let availableConnections = [];
+let activeTable = null;
+let lastQueryDurationMs = 0;
+
+// ── Autocomplete v3 state (used by SuggestionController) ────
+let recentQuestionsCache = [];      // string[]
+let pinnedQuestionsCache = [];      // string[]
+let knowledgeQuestionsCache = null; // { sourceKey, questions: [{question, category, tags}] } | null
+let _kqLoading = false;
+let _kqLoadedFor = null;
+let lastInsertedTable = null;
+const _llmSuggestCache = new Map(); // key: sourceKey + '|' + partial.toLowerCase() => { ts, suggestions, corrections }
+let _llmAbort = null;
+let _llmRequestId = 0;
+let _llmDebounceTimer = null;
+// `#` trigger — columns. Cache keyed by sourceKey + '|' + table_or_ALL.
+const _columnsCache = new Map();
+const _columnsLoading = new Set(); // keys currently in flight
+
+const TABLE_ICON_SVG = '<svg class="table-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/></svg>';
+
+function getActiveConnection() {
+    return localStorage.getItem(CONNECTION_STORAGE_KEY) || '';
+}
+
+function setActiveConnection(sourceKey) {
+    if (sourceKey) {
+        localStorage.setItem(CONNECTION_STORAGE_KEY, sourceKey);
+    } else {
+        localStorage.removeItem(CONNECTION_STORAGE_KEY);
+    }
+}
+
+function requireConnection() {
+    const c = getActiveConnection();
+    if (!c) {
+        showError('Please pick a connection from the sidebar.');
+        return null;
+    }
+    return c;
+}
+
+function setConnectionStatus(status) {
+    const dot = document.getElementById('connection-status-dot');
+    if (dot) dot.setAttribute('data-status', status); // ok | connecting | error
+}
+
+function setConnectionPillName(name) {
+    const el = document.getElementById('connection-pill-name');
+    if (el) el.textContent = name;
+}
+
+async function loadConnections() {
+    const select = document.getElementById('connection-select');
+    if (!select) return;
+    setConnectionStatus('connecting');
+    setConnectionPillName('Loading\u2026');
+    try {
+        const response = await fetch('/api/connections');
+        const data = await response.json();
+        availableConnections = (data && data.connections) || [];
+        if (availableConnections.length === 0) {
+            select.innerHTML = '<option value="">No connections</option>';
+            setActiveConnection('');
+            setConnectionStatus('error');
+            setConnectionPillName('No connections');
+            return;
+        }
+        const stored = getActiveConnection();
+        const validStored = availableConnections.find(c => c.source_key === stored);
+        const active = validStored ? validStored.source_key : availableConnections[0].source_key;
+        setActiveConnection(active);
+        select.innerHTML = availableConnections.map(c => {
+            const label = `${c.display_name} (${c.database_type || 'unknown'})`;
+            const selected = c.source_key === active ? ' selected' : '';
+            return `<option value="${c.source_key}"${selected}>${label}</option>`;
+        }).join('');
+        const activeRow = availableConnections.find(c => c.source_key === active);
+        setConnectionPillName(activeRow ? activeRow.display_name : active);
+        setConnectionStatus('ok');
+    } catch (e) {
+        console.error('Failed to load connections', e);
+        select.innerHTML = '<option value="">Failed to load</option>';
+        setConnectionStatus('error');
+        setConnectionPillName('Failed to load');
+    }
+}
+
+function onConnectionChange() {
+    const select = document.getElementById('connection-select');
+    const newConnection = select.value;
+    setActiveConnection(newConnection);
+    // Reset session and clear caches that are connection-specific.
+    currentSessionId = null;
+    allTables = [];
+    activeTable = null;
+    const tablesList = document.getElementById('tables-list');
+    if (tablesList) tablesList.innerHTML = '';
+    const searchInput = document.getElementById('table-search');
+    if (searchInput) { searchInput.style.display = 'none'; searchInput.value = ''; }
+    const activeRow = availableConnections.find(c => c.source_key === newConnection);
+    setConnectionPillName(activeRow ? activeRow.display_name : (newConnection || 'No connection'));
+    setConnectionStatus(newConnection ? 'ok' : 'error');
+    // Reset autocomplete caches (they're connection-specific).
+    if (typeof SuggestionController !== 'undefined') SuggestionController.reset();
+    // Auto-load tables for the new connection.
+    if (newConnection) loadTables();
+    if (typeof displayHistory === 'function') displayHistory();
+}
+
+function setPageTitle(text) {
+    const el = document.getElementById('page-title');
+    if (el) el.textContent = text || 'New query';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    loadConnections().then(() => {
+        if (typeof displayHistory === 'function') displayHistory();
+        // Auto-load tables once we know the active connection.
+        if (getActiveConnection()) loadTables();
+    });
+});
+
 // Ask question
 async function askQuestion() {
     const questionInput = document.getElementById('question-input');
@@ -35,17 +160,26 @@ async function askQuestion() {
     hideResults();
     showLoading();
     
+    const connection = requireConnection();
+    if (!connection) {
+        hideLoading();
+        return;
+    }
+
+    const askStart = performance.now();
     try {
         const response = await fetch('/api/ask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 question,
+                connection,
                 session_id: currentSessionId  // Maintain conversation continuity
             }),
         });
+        lastQueryDurationMs = performance.now() - askStart;
         
         const data = await response.json();
         
@@ -85,16 +219,19 @@ function displayResults(data) {
     // Show results section
     const resultsSection = document.getElementById('results-section');
     resultsSection.style.display = 'flex';
+
+    // Derive a human-readable result title from the question + bind page title
+    const derivedTitle = deriveResultTitle(data.question);
+    setResultTitle(derivedTitle);
+    setPageTitle(derivedTitle);
     
-    // Display question
-    document.getElementById('question-display').textContent = data.question;
-    
-    // Display SQL
+    // Display SQL via CodeMirror (or fallback)
     if (data.sql) {
         currentSql = data.sql;
-        document.getElementById('sql-display').textContent = data.sql;
+        initCodeMirror(data.sql);
     } else {
-        document.getElementById('sql-display').textContent = 'No SQL generated';
+        currentSql = '';
+        initCodeMirror('-- No SQL generated');
     }
     
     // Display explanation
@@ -126,9 +263,13 @@ function displayResults(data) {
     } else if (data.results && data.results.columns && (data.results.data || data.results.rows)) {
         currentResults = data.results;
         resultsDisplay.innerHTML = formatResultsAsTable(data.results);
+        showResultsToolbar(true);
         exportBtn.style.display = 'inline-block';
         copyResultsBtn.style.display = 'inline-block';
         describeBtn.style.display = 'inline-block';
+        // Result meta line: "<n> rows · 0.3s"
+        const rows = data.results.data || data.results.rows || [];
+        setResultMeta(rows.length, lastQueryDurationMs);
         
         // Store results globally for profiling manager
         window.currentResults = data.results;
@@ -145,6 +286,7 @@ function displayResults(data) {
         }
     } else {
         resultsDisplay.innerHTML = '<div class="no-results">No results to display</div>';
+        showResultsToolbar(false);
         exportBtn.style.display = 'none';
         copyResultsBtn.style.display = 'none';
         describeBtn.style.display = 'none';
@@ -153,6 +295,7 @@ function displayResults(data) {
         if (typeof profilingManager !== 'undefined') {
             profilingManager.hide();
         }
+        setResultMeta(0, lastQueryDurationMs);
     }
     
     // Display structured prompt in Query Prompt tab
@@ -168,70 +311,215 @@ function displayResults(data) {
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// Format results as HTML table with sorting and filtering
+// Format results as HTML table with sorting and filtering.
+// The filter input now lives in the external toolbar; the internal
+// .table-controls block was removed as part of the toolbar consolidation.
 function formatResultsAsTable(results) {
     // Handle both 'data' and 'rows' field names
     let rows = results.data || results.rows;
     if (!rows || rows.length === 0) {
         return '<div class="no-results">No data found</div>';
     }
-    
+
     // Reset sort/filter on new results
     sortColumn = null;
     sortDirection = 'asc';
     filterText = '';
-    
-    // Add filter input
-    let html = '<div class="table-controls">';
-    html += '<input type="text" id="result-filter" class="result-filter-input" placeholder="Filter results..." onkeyup="filterResults()" />';
-    html += '</div>';
-    
-    html += '<div id="table-container">';
+    const externalFilter = document.getElementById('result-filter');
+    if (externalFilter) externalFilter.value = '';
+
+    let html = '<div id="table-container">';
     html += renderTable(results, rows);
     html += '</div>';
-    
     return html;
 }
 
-// Render the actual table
+// Render the actual table with distribution bar + dim badges + tabular-nums.
 function renderTable(results, rows) {
+    const profile = profileColumns(results, rows);
+    const distStats = computeDistributionStats(rows, results.columns, profile);
+    // Only show the distribution column when it's actually meaningful:
+    //   - we found a numeric column to use as the metric
+    //   - more than one row to compare
+    //   - the values vary (min != max), so the bars won't all be identical
+    //   - the result includes at least one categorical/dim column to compare
+    //     against (otherwise the bar is decoration on a single number column)
+    const showDistribution =
+        profile.distributionColumn !== null &&
+        distStats.max > 0 &&
+        distStats.min !== distStats.max &&
+        rows.length > 1 &&
+        profile.dimCols.size > 0;
+    const distMax = distStats.max;
+
     let html = '<table id="results-table"><thead><tr>';
-    
-    // Table headers with sort buttons
     results.columns.forEach((column, index) => {
         const sortIcon = sortColumn === index ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
-        html += `<th onclick="sortTable(${index})" style="cursor: pointer;" title="Click to sort">${escapeHtml(column)}${sortIcon}</th>`;
+        const isNum = profile.numericCols.has(index);
+        const cls = isNum ? ' class="num-cell"' : '';
+        html += `<th${cls} onclick="sortTable(${index})" style="cursor: pointer;" title="Click to sort">${escapeHtml(column)}${sortIcon}</th>`;
     });
+    if (showDistribution) {
+        html += '<th class="dist-col" title="Relative magnitude">Distribution</th>';
+    }
     html += '</tr></thead><tbody>';
-    
-    // Table rows
+
     rows.forEach(row => {
         html += '<tr class="data-row">';
-        // Handle both array format [val1, val2, ...] and object format {col1: val1, col2: val2, ...}
-        if (Array.isArray(row)) {
-            row.forEach(cell => {
-                const value = cell === null ? '<em>NULL</em>' : escapeHtml(String(cell));
-                html += `<td>${value}</td>`;
-            });
-        } else {
-            // Row is an object, extract values in column order
-            results.columns.forEach(column => {
-                const cell = row[column];
-                const value = cell === null || cell === undefined ? '<em>NULL</em>' : escapeHtml(String(cell));
-                html += `<td>${value}</td>`;
-            });
+        results.columns.forEach((column, idx) => {
+            const cell = Array.isArray(row) ? row[idx] : row[column];
+            html += renderCellHtml(cell, idx, profile);
+        });
+        if (showDistribution) {
+            const distVal = Array.isArray(row)
+                ? Number(row[profile.distributionColumn])
+                : Number(row[results.columns[profile.distributionColumn]]);
+            const pct = distMax > 0 ? Math.max(0, Math.min(100, Math.round((distVal / distMax) * 100))) : 0;
+            html += `<td class="dist-cell"><div class="dist-bar-track"><div class="dist-bar-fill" style="width:${pct}%"></div></div></td>`;
         }
         html += '</tr>';
     });
-    
+
     html += '</tbody></table>';
-    
-    // Add row count
-    html += `<p style="margin-top: 15px; color: #666; font-size: 0.9rem;" id="row-count">
-        ${rows.length} row${rows.length !== 1 ? 's' : ''} returned
-    </p>`;
-    
+    html += `<p style="margin-top: 12px; color: var(--color-muted); font-size: var(--text-xs);" id="row-count">${rows.length} row${rows.length !== 1 ? 's' : ''}</p>`;
     return html;
+}
+
+// ----------------------------------------------------------------
+// Result-rendering helpers
+// ----------------------------------------------------------------
+function renderCellHtml(value, colIndex, profile) {
+    if (value === null || value === undefined || value === '') {
+        return '<td><em style="color: var(--color-faint);">NULL</em></td>';
+    }
+    if (profile.dimCols.has(colIndex)) {
+        return `<td><span class="dim-badge">${escapeHtml(String(value))}</span></td>`;
+    }
+    if (profile.numericCols.has(colIndex)) {
+        return `<td class="num-cell">${escapeHtml(formatNumeric(value))}</td>`;
+    }
+    return `<td>${escapeHtml(String(value))}</td>`;
+}
+
+function profileColumns(results, rows) {
+    const numericCols = new Set();
+    const dimCols = new Set();
+    let distributionColumn = null;
+
+    const numCols = results.columns.length;
+    const sampleSize = Math.min(rows.length, 200);
+
+    for (let i = 0; i < numCols; i++) {
+        const colName = results.columns[i];
+        const lowerName = String(colName).toLowerCase();
+        // Treat *id, *_key, *_pk-style columns as plain (no badge / no number formatting).
+        const isIdLike = /(^id$|_id$|^key$|_key$|_pk$|^pk$)/.test(lowerName);
+
+        let numCount = 0;
+        let nonNullCount = 0;
+        const distinct = new Set();
+        for (let r = 0; r < sampleSize; r++) {
+            const row = rows[r];
+            const cell = Array.isArray(row) ? row[i] : row[colName];
+            if (cell === null || cell === undefined || cell === '') continue;
+            nonNullCount++;
+            distinct.add(String(cell));
+            const num = Number(cell);
+            if (Number.isFinite(num) && /^[-+]?\d/.test(String(cell).trim())) numCount++;
+        }
+        const isNumeric = !isIdLike && nonNullCount > 0 && numCount / nonNullCount >= 0.7;
+        if (isNumeric) numericCols.add(i);
+
+        // Dim heuristic: <20 distinct values, not numeric, not id-like, more than one row.
+        if (!isNumeric && !isIdLike && nonNullCount > 0 && distinct.size > 0 && distinct.size < 20) {
+            dimCols.add(i);
+        }
+    }
+
+    // Pick a distribution column: largest-magnitude numeric column.
+    let bestMax = -Infinity;
+    numericCols.forEach(idx => {
+        let max = 0;
+        const colName = results.columns[idx];
+        for (let r = 0; r < rows.length; r++) {
+            const row = rows[r];
+            const cell = Array.isArray(row) ? row[idx] : row[colName];
+            const num = Number(cell);
+            if (Number.isFinite(num) && Math.abs(num) > max) max = Math.abs(num);
+        }
+        if (max > bestMax) {
+            bestMax = max;
+            distributionColumn = idx;
+        }
+    });
+    return { numericCols, dimCols, distributionColumn };
+}
+
+function computeDistributionStats(rows, columns, profile) {
+    if (profile.distributionColumn === null) return { min: 0, max: 0 };
+    let max = -Infinity;
+    let min = Infinity;
+    const colName = columns[profile.distributionColumn];
+    for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        const cell = Array.isArray(row) ? row[profile.distributionColumn] : row[colName];
+        const num = Number(cell);
+        if (Number.isFinite(num)) {
+            const abs = Math.abs(num);
+            if (abs > max) max = abs;
+            if (abs < min) min = abs;
+        }
+    }
+    if (!Number.isFinite(max)) max = 0;
+    if (!Number.isFinite(min)) min = 0;
+    return { min, max };
+}
+
+function formatNumeric(value) {
+    if (typeof value === 'number') {
+        if (Number.isInteger(value)) return value.toLocaleString('en-US');
+        return value.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    }
+    const num = Number(value);
+    if (!Number.isFinite(num)) return String(value);
+    if (Number.isInteger(num)) return num.toLocaleString('en-US');
+    return num.toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
+// ----------------------------------------------------------------
+// Result title / meta + toolbar visibility
+// ----------------------------------------------------------------
+function setResultTitle(text) {
+    const el = document.getElementById('result-title');
+    if (el) el.textContent = text || 'Results';
+}
+function setResultMeta(rowCount, durationMs) {
+    const el = document.getElementById('result-meta');
+    if (!el) return;
+    const seconds = (durationMs / 1000);
+    const durStr = seconds >= 0.1 ? seconds.toFixed(1) + 's' : Math.max(1, Math.round(durationMs)) + 'ms';
+    el.textContent = `${rowCount} row${rowCount !== 1 ? 's' : ''} \u00b7 ${durStr}`;
+}
+function showResultsToolbar(visible) {
+    const el = document.getElementById('results-toolbar');
+    if (el) el.style.display = visible ? 'flex' : 'none';
+}
+
+function deriveResultTitle(question) {
+    if (!question) return 'Results';
+    let q = String(question).trim();
+    // Strip leading filler words / question marks.
+    q = q.replace(/[?\.!]+$/g, '');
+    q = q.replace(/^\s*(please\s+)?(can you\s+|could you\s+)?(show me|show|give me|tell me|list|fetch|get me|get|what is|whats|what's|what are|how many|how much|count|find)\s+/i, '');
+    if (!q) return 'Results';
+    // Title-case but keep small words lowercase (except first word).
+    const small = new Set(['a','an','and','as','at','but','by','for','in','of','on','or','the','to','vs']);
+    const words = q.split(/\s+/);
+    return words.map((w, i) => {
+        const lower = w.toLowerCase();
+        if (i > 0 && small.has(lower)) return lower;
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+    }).join(' ').slice(0, 80);
 }
 
 // Sort table by column
@@ -410,15 +698,16 @@ function copySql() {
     if (!currentSql) return;
     
     navigator.clipboard.writeText(currentSql).then(() => {
-        const button = document.querySelector('.copy-button');
-        const originalText = button.textContent;
-        button.textContent = '✓ Copied!';
-        button.style.background = '#28a745';
-        
-        setTimeout(() => {
-            button.textContent = originalText;
-            button.style.background = '';
-        }, 2000);
+        const button = document.querySelector('.sql-copy-btn') || document.querySelector('.copy-button');
+        if (button) {
+            const originalHTML = button.innerHTML;
+            button.textContent = '✓ Copied!';
+            button.style.color = 'var(--color-success)';
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.style.color = '';
+            }, 2000);
+        }
     }).catch(err => {
         console.error('Failed to copy:', err);
     });
@@ -448,14 +737,15 @@ function copyResults() {
     
     navigator.clipboard.writeText(text).then(() => {
         const button = document.getElementById('copy-results-btn');
-        const originalText = button.textContent;
-        button.textContent = '✓ Copied!';
-        button.style.background = '#28a745';
-        
-        setTimeout(() => {
-            button.textContent = originalText;
-            button.style.background = '';
-        }, 2000);
+        if (button) {
+            const originalText = button.textContent;
+            button.textContent = '✓ Copied!';
+            button.style.color = 'var(--color-success)';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = '';
+            }, 2000);
+        }
     }).catch(err => {
         console.error('Failed to copy:', err);
     });
@@ -514,8 +804,14 @@ async function loadTables() {
     const searchInput = document.getElementById('table-search');
     tablesList.innerHTML = '<p style="color: #999; font-size: 0.9rem;">Loading...</p>';
     
+    const connection = requireConnection();
+    if (!connection) {
+        tablesList.innerHTML = '<p style="color: #999; font-size: 0.9rem;">Pick a connection first</p>';
+        return;
+    }
+
     try {
-        const response = await fetch('/api/tables');
+        const response = await fetch('/api/tables?connection=' + encodeURIComponent(connection));
         const data = await response.json();
         
         if (data.tables && data.tables.length > 0) {
@@ -538,16 +834,31 @@ function filterTables() {
     displayFilteredTables(filtered);
 }
 
-// Display filtered tables
+// Display filtered tables (with icons + active highlight).
 function displayFilteredTables(tables) {
     const tablesList = document.getElementById('tables-list');
     if (tables.length > 0) {
-        tablesList.innerHTML = tables.map(table => 
-            `<div class="table-item" onclick="fillQuestion('Show me data from ${table}')">${escapeHtml(table)}</div>`
-        ).join('');
+        tablesList.innerHTML = tables.map(table => {
+            const safe = escapeHtml(table);
+            const safeAttr = table.replace(/'/g, "\\'");
+            const isActive = activeTable === table ? ' active' : '';
+            return `<div class="table-item${isActive}" data-table="${safe}" onclick="selectTable('${safeAttr}')">${TABLE_ICON_SVG}<span class="table-name">${safe}</span></div>`;
+        }).join('');
     } else {
-        tablesList.innerHTML = '<p style="color: #999; font-size: 0.9rem;">No matching tables</p>';
+        tablesList.innerHTML = '<p style="color: var(--color-muted); font-size: var(--text-xs); padding: 4px 0;">No matching tables</p>';
     }
+}
+
+function selectTable(table) {
+    activeTable = table;
+    // Re-render with the active row highlighted.
+    const searchInput = document.getElementById('table-search');
+    const term = (searchInput && searchInput.value || '').toLowerCase();
+    const filtered = term
+        ? allTables.filter(t => t.toLowerCase().includes(term))
+        : allTables;
+    displayFilteredTables(filtered);
+    fillQuestion('Show me data from ' + table);
 }
 
 // Export to Excel
@@ -600,13 +911,19 @@ function fillQuestion(question) {
     document.getElementById('question-input').focus();
 }
 
-// Show/hide UI elements
+// Show/hide UI elements (skeleton-based loading)
 function showLoading() {
-    document.getElementById('loading').style.display = 'block';
+    const el = document.getElementById('loading');
+    if (el) el.style.display = 'flex';
+    const btn = document.getElementById('ask-button');
+    if (btn) btn.classList.add('btn-loading');
 }
 
 function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
+    const el = document.getElementById('loading');
+    if (el) el.style.display = 'none';
+    const btn = document.getElementById('ask-button');
+    if (btn) btn.classList.remove('btn-loading');
 }
 
 function showError(message) {
@@ -642,29 +959,41 @@ function displayStructuredPrompt(promptData) {
             `<pre class="prompt-text">${escapeHtml(promptData.system_instructions)}</pre>`, true);
     }
     
-    // Section 2: DDL (Database Schema)
-    if (promptData.ddl && promptData.ddl.length > 0) {
-        const ddlContent = promptData.ddl.map(ddl => `<pre class="prompt-text">${escapeHtml(ddl)}</pre>`).join('');
-        html += createPromptSection('ddl', `DDL / Database Schema (${promptData.ddl.length})`, ddlContent, false);
+    // Section 2: Active Connection
+    if (promptData.connection) {
+        const conn = promptData.connection;
+        const connContent = `<pre class="prompt-text">${escapeHtml(`${conn.display_name} (${conn.database_type}) — source_key: ${conn.source_key}`)}</pre>`;
+        html += createPromptSection('connection', 'Active Connection', connContent, true);
     }
     
-    // Section 3: SQL Examples
-    if (promptData.sql_examples && promptData.sql_examples.length > 0) {
-        const examplesContent = promptData.sql_examples.map(ex => 
-            `<div class="sql-example">
-                <div class="example-question"><strong>Q:</strong> ${escapeHtml(ex.question)}</div>
-                <div class="example-sql"><strong>SQL:</strong><pre>${escapeHtml(ex.sql)}</pre></div>
-            </div>`
-        ).join('');
-        html += createPromptSection('sql-examples', `SQL Examples (${promptData.sql_examples.length})`, examplesContent, false);
+    // Section 3: Tables
+    if (promptData.tables) {
+        html += createPromptSection('tables', 'Tables', `<pre class="prompt-text">${escapeHtml(promptData.tables)}</pre>`, false);
     }
     
-    // Section 4: Documentation
-    if (promptData.documentation && promptData.documentation.length > 0) {
-        const docContent = '<ul class="documentation-list">' + 
-            promptData.documentation.map(doc => `<li>${escapeHtml(doc)}</li>`).join('') + 
-            '</ul>';
-        html += createPromptSection('documentation', `Documentation (${promptData.documentation.length})`, docContent, false);
+    // Section 4: Columns
+    if (promptData.columns) {
+        html += createPromptSection('columns', 'Columns', `<pre class="prompt-text">${escapeHtml(promptData.columns)}</pre>`, false);
+    }
+    
+    // Section 5: Relationships
+    if (promptData.relationships) {
+        html += createPromptSection('relationships', 'Relationships', `<pre class="prompt-text">${escapeHtml(promptData.relationships)}</pre>`, false);
+    }
+    
+    // Section 6: Sources
+    if (promptData.sources) {
+        html += createPromptSection('sources', 'Sources', `<pre class="prompt-text">${escapeHtml(promptData.sources)}</pre>`, false);
+    }
+    
+    // Section 7: Knowledge Pairs
+    if (promptData.knowledge_pairs) {
+        html += createPromptSection('knowledge-pairs', 'Knowledge Pairs', `<pre class="prompt-text">${escapeHtml(promptData.knowledge_pairs)}</pre>`, false);
+    }
+    
+    // Section 8: Business Terms
+    if (promptData.business_terms) {
+        html += createPromptSection('business-terms', 'Business Terms', `<pre class="prompt-text">${escapeHtml(promptData.business_terms)}</pre>`, false);
     }
     
     // Section 5: Tool Description
@@ -780,11 +1109,19 @@ async function displayHistory() {
     const historyDiv = document.getElementById('question-history');
     const clearBtn = document.getElementById('clear-history-btn');
     
+    const connection = getActiveConnection();
+    if (!connection) {
+        historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">Pick a connection</p>';
+        if (clearBtn) clearBtn.style.display = 'none';
+        return;
+    }
+
     try {
-        // Fetch both pinned and recent questions
+        // Fetch both pinned and recent questions for the active connection
+        const qs = `?user_id=default&connection=${encodeURIComponent(connection)}`;
         const [pinnedResponse, recentResponse] = await Promise.all([
-            fetch('/api/user/pinned-questions?user_id=default'),
-            fetch('/api/user/recent-questions?user_id=default&limit=15')
+            fetch(`/api/user/pinned-questions${qs}`),
+            fetch(`/api/user/recent-questions${qs}&limit=15`)
         ]);
         
         if (!pinnedResponse.ok || !recentResponse.ok) {
@@ -796,7 +1133,11 @@ async function displayHistory() {
         
         const pinnedQuestions = pinnedData.questions || [];
         const recentQuestions = recentData.questions || [];
-        
+
+        // Mirror into autocomplete caches so Tier 1 (Recent) is instant.
+        recentQuestionsCache = recentQuestions.slice();
+        pinnedQuestionsCache = pinnedQuestions.slice();
+
         if (pinnedQuestions.length === 0 && recentQuestions.length === 0) {
             historyDiv.innerHTML = '<p style="color: #999; font-size: 0.9rem; padding: 10px 0;">No recent questions</p>';
             clearBtn.style.display = 'none';
@@ -840,12 +1181,14 @@ async function displayHistory() {
 // Pin a question
 async function pinQuestion(event, question) {
     event.stopPropagation();  // Prevent triggering fillQuestion
+    const connection = requireConnection();
+    if (!connection) return;
     
     try {
         const response = await fetch('/api/user/pin-question', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_id: 'default', question: question})
+            body: JSON.stringify({user_id: 'default', connection, question: question})
         });
         
         if (response.ok) {
@@ -861,12 +1204,14 @@ async function pinQuestion(event, question) {
 // Unpin a question
 async function unpinQuestion(event, question) {
     event.stopPropagation();  // Prevent triggering fillQuestion
+    const connection = requireConnection();
+    if (!connection) return;
     
     try {
         const response = await fetch('/api/user/unpin-question', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_id: 'default', question: question})
+            body: JSON.stringify({user_id: 'default', connection, question: question})
         });
         
         if (response.ok) {
@@ -1171,7 +1516,7 @@ function formatOutliersSection(stats) {
     return html;
 }
 
-// Render simple boxplot
+// Render simple boxplot — uses CSS variables for colors
 function renderBoxplot(stat) {
     const range = stat.max - stat.min;
     const scale = 100 / range;
@@ -1185,22 +1530,22 @@ function renderBoxplot(stat) {
     let html = '<div class="boxplot" style="position: relative; height: 60px; margin-top: 10px;">';
     
     // Whisker line
-    html += `<div style="position: absolute; top: 29px; left: ${minPos}%; width: ${maxPos - minPos}%; height: 2px; background: #999;"></div>`;
+    html += `<div style="position: absolute; top: 29px; left: ${minPos}%; width: ${maxPos - minPos}%; height: 2px; background: var(--color-border-2);"></div>`;
     
     // Box
-    html += `<div style="position: absolute; top: 15px; left: ${q1Pos}%; width: ${q3Pos - q1Pos}%; height: 30px; background: #667eea; border: 2px solid #5568d3; border-radius: 4px;"></div>`;
+    html += `<div style="position: absolute; top: 15px; left: ${q1Pos}%; width: ${q3Pos - q1Pos}%; height: 30px; background: var(--color-accent); border: 2px solid var(--color-accent-2); border-radius: var(--radius-sm);"></div>`;
     
     // Median line
-    html += `<div style="position: absolute; top: 15px; left: ${medianPos}%; width: 2px; height: 30px; background: #ff6b6b;"></div>`;
+    html += `<div style="position: absolute; top: 15px; left: ${medianPos}%; width: 2px; height: 30px; background: var(--color-error);"></div>`;
     
     // Min/Max markers
-    html += `<div style="position: absolute; top: 25px; left: ${minPos}%; width: 2px; height: 10px; background: #999;"></div>`;
-    html += `<div style="position: absolute; top: 25px; left: ${maxPos}%; width: 2px; height: 10px; background: #999;"></div>`;
+    html += `<div style="position: absolute; top: 25px; left: ${minPos}%; width: 2px; height: 10px; background: var(--color-border-2);"></div>`;
+    html += `<div style="position: absolute; top: 25px; left: ${maxPos}%; width: 2px; height: 10px; background: var(--color-border-2);"></div>`;
     
     // Labels
-    html += `<div style="position: absolute; top: 45px; left: ${minPos}%; font-size: 0.7rem; color: #666;">${stat.min.toFixed(1)}</div>`;
-    html += `<div style="position: absolute; top: 45px; left: ${medianPos}%; font-size: 0.7rem; color: #666; transform: translateX(-50%);">${stat.median.toFixed(1)}</div>`;
-    html += `<div style="position: absolute; top: 45px; right: ${100 - maxPos}%; font-size: 0.7rem; color: #666;">${stat.max.toFixed(1)}</div>`;
+    html += `<div style="position: absolute; top: 45px; left: ${minPos}%; font-size: var(--text-xs); color: var(--color-muted);">${stat.min.toFixed(1)}</div>`;
+    html += `<div style="position: absolute; top: 45px; left: ${medianPos}%; font-size: var(--text-xs); color: var(--color-muted); transform: translateX(-50%);">${stat.median.toFixed(1)}</div>`;
+    html += `<div style="position: absolute; top: 45px; right: ${100 - maxPos}%; font-size: var(--text-xs); color: var(--color-muted);">${stat.max.toFixed(1)}</div>`;
     
     html += '</div>';
     return html;
@@ -1325,13 +1670,13 @@ function calculateCorrelation(values1, values2) {
     return denominator === 0 ? 0 : numerator / denominator;
 }
 
-// Get color for correlation value
+// Get color for correlation value — uses oklch matching design tokens
 function getCorrelationColor(corr) {
-    if (corr >= 0.7) return 'rgba(40, 167, 69, ' + (0.3 + corr * 0.7) + ')';
-    if (corr >= 0.3) return 'rgba(40, 167, 69, ' + (corr * 0.5) + ')';
-    if (corr >= -0.3) return 'rgba(200, 200, 200, 0.3)';
-    if (corr >= -0.7) return 'rgba(220, 53, 69, ' + (-corr * 0.5) + ')';
-    return 'rgba(220, 53, 69, ' + (0.3 + -corr * 0.7) + ')';
+    if (corr >= 0.7)  return `oklch(50% 0.18 145 / ${(0.3 + corr * 0.7).toFixed(2)})`;
+    if (corr >= 0.3)  return `oklch(50% 0.18 145 / ${(corr * 0.5).toFixed(2)})`;
+    if (corr >= -0.3) return `oklch(80% 0.005 260 / 0.25)`;
+    if (corr >= -0.7) return `oklch(52% 0.22 25 / ${(-corr * 0.5).toFixed(2)})`;
+    return `oklch(52% 0.22 25 / ${(0.3 + -corr * 0.7).toFixed(2)})`;
 }
 
 // Switch between stats tabs
@@ -1372,22 +1717,883 @@ window.clearHistory = clearHistory;
 window.toggleDescribe = toggleDescribe;
 window.switchStatsTab = switchStatsTab;
 
-// Enter key to submit
-document.addEventListener('DOMContentLoaded', () => {
-    const questionInput = document.getElementById('question-input');
-    questionInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault(); // Prevent newline
-            askQuestion();
-        }
+// ======================================================
+// THEME SYSTEM
+// ======================================================
+
+const ICON_SUN  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`;
+const ICON_MOON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
+
+function getTheme() {
+    return document.documentElement.getAttribute('data-theme') || 'light';
+}
+
+function updateThemeIcon(theme) {
+    const iconEl = document.getElementById('theme-icon');
+    const btn    = document.getElementById('theme-toggle');
+    if (!iconEl || !btn) return;
+    if (theme === 'dark') {
+        iconEl.innerHTML = ICON_SUN;
+        btn.setAttribute('aria-label', 'Switch to light mode');
+    } else {
+        iconEl.innerHTML = ICON_MOON;
+        btn.setAttribute('aria-label', 'Switch to dark mode');
+    }
+}
+
+function toggleTheme() {
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.classList.add('theme-toggling');
+    setTimeout(() => {
+        const next = getTheme() === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        updateThemeIcon(next);
+        if (btn) btn.classList.remove('theme-toggling');
+        // Re-init CodeMirror with new theme
+        if (currentSql) initCodeMirror(currentSql);
+    }, 100);
+}
+
+// ======================================================
+// CODEMIRROR 6
+// ======================================================
+
+function initCodeMirror(sqlContent) {
+    const container = document.getElementById('sql-editor');
+    if (!container) return;
+
+    // Destroy previous instance
+    if (window._cmEditor) {
+        try { window._cmEditor.destroy(); } catch (e) { /* ignore */ }
+        window._cmEditor = null;
+    }
+
+    const cm = window.CodeMirrorService;
+    if (!cm || !cm.ready) {
+        // Fallback: plain pre block
+        container.innerHTML = `<pre class="sql-display" style="margin:0;border:none;border-radius:0;">${escapeHtml(sqlContent || '')}</pre>`;
+        return;
+    }
+
+    const { EditorView, EditorState, lineNumbers, sql, oneDark } = cm;
+    const isDark = getTheme() === 'dark';
+
+    const extensions = [
+        lineNumbers(),
+        sql(),
+        EditorView.lineWrapping,
+        EditorView.editable.of(false),
+        ...(isDark ? [oneDark] : []),
+    ];
+
+    window._cmEditor = new EditorView({
+        state: EditorState.create({ doc: sqlContent || '', extensions }),
+        parent: container
     });
-    
+}
+
+// ======================================================
+// SIDEBAR TOGGLE
+// ======================================================
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (!sidebar) return;
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+        const isOpen = sidebar.classList.contains('mobile-open');
+        sidebar.classList.toggle('mobile-open', !isOpen);
+        if (overlay) overlay.classList.toggle('active', !isOpen);
+    } else {
+        sidebar.classList.toggle('collapsed');
+    }
+}
+
+// ======================================================
+// VIEWSCHEMA STUB
+// ======================================================
+
+function viewSchema(tableName) {
+    fillQuestion('DESCRIBE ' + tableName);
+}
+
+// ======================================================
+// AUTOCOMPLETE v3 — Tiered + Special-Character Triggers
+// ======================================================
+//
+// Trigger registry: extending this array (with `#`, `$`, `!`, etc.) does
+// NOT require controller changes. Each entry describes a special-char
+// trigger and where to source its items.
+const TRIGGERS = [
+    {
+        char: '@',
+        label: 'Tables',
+        hint: 'select to insert',
+        getItems: () => (allTables || []).map(t => ({ text: t, tier: 'table' })),
+        onPick: (item) => { lastInsertedTable = item.text; },
+    },
+    {
+        char: '/',
+        label: 'Templates',
+        hint: 'from your knowledge base',
+        getItems: () => {
+            const list = (knowledgeQuestionsCache && knowledgeQuestionsCache.questions) || [];
+            return list.map(q => ({ text: q.question, tier: 'template', category: q.category }));
+        },
+        onPick: () => {},
+    },
+    {
+        char: '#',
+        label: () => {
+            const t = resolveColumnScope();
+            return t ? `Columns of ${t}` : 'Columns (all tables)';
+        },
+        hint: () => {
+            const t = resolveColumnScope();
+            return t ? 'select to insert' : 'type @TableName first to scope';
+        },
+        // Provided by the controller so it can interleave group headers in
+        // unscoped mode. Returning null tells the controller to use the
+        // dedicated buildColumnsItems() pipeline instead of the default.
+        getItems: null,
+        scoped: () => !!resolveColumnScope(),
+        onPick: (item) => { if (item.table) lastInsertedTable = item.table; },
+    },
+    // Future stubs (uncomment + flesh out as we ship them):
+    // { char: '$', label: 'Measures', hint: 'coming soon', getItems: () => [], onPick: () => {} },
+    // { char: '!', label: 'Filters',  hint: 'coming soon', getItems: () => [], onPick: () => {} },
+];
+
+function getTriggerByChar(c) {
+    for (let i = 0; i < TRIGGERS.length; i++) {
+        if (TRIGGERS[i].char === c) return TRIGGERS[i];
+    }
+    return null;
+}
+
+// Walk back from caret to nearest whitespace/start; if the resulting token
+// starts with a registered trigger char, we're in trigger mode.
+function getTriggerContext(textarea) {
+    if (!textarea) return null;
+    const value = textarea.value || '';
+    const pos = textarea.selectionStart || 0;
+    let start = pos;
+    while (start > 0 && !/\s/.test(value[start - 1])) start--;
+    const token = value.slice(start, pos);
+    if (!token) return null;
+    const ch = token[0];
+    const trigger = getTriggerByChar(ch);
+    if (!trigger) return null;
+    return { trigger, query: token.slice(1), tokenStart: start, tokenEnd: pos };
+}
+
+function insertReplacingTrigger(textarea, ctx, replacement) {
+    const before = textarea.value.slice(0, ctx.tokenStart);
+    const after = textarea.value.slice(ctx.tokenEnd);
+    // Add a trailing space so the user can keep typing naturally,
+    // unless the cursor is already followed by whitespace.
+    const sep = (after.length === 0 || /\s/.test(after[0])) ? '' : ' ';
+    textarea.value = before + replacement + sep + after;
+    const newPos = before.length + replacement.length + sep.length;
+    textarea.selectionStart = textarea.selectionEnd = newPos;
+    textarea.focus();
+}
+
+function highlightMatch(text, query) {
+    if (!query) return escapeHtml(text);
+    const lowText = String(text).toLowerCase();
+    const lowQ = String(query).toLowerCase();
+    const idx = lowText.indexOf(lowQ);
+    if (idx === -1) return escapeHtml(text);
+    return escapeHtml(text.slice(0, idx)) +
+        '<mark>' + escapeHtml(text.slice(idx, idx + query.length)) + '</mark>' +
+        escapeHtml(text.slice(idx + query.length));
+}
+
+async function fetchKnowledgeQuestions() {
+    const conn = getActiveConnection();
+    if (!conn) return;
+    if (_kqLoadedFor === conn && knowledgeQuestionsCache) return;
+    if (_kqLoading) return;
+    _kqLoading = true;
+    try {
+        const resp = await fetch('/api/knowledge-questions?connection=' + encodeURIComponent(conn));
+        const data = await resp.json();
+        if (resp.ok) {
+            knowledgeQuestionsCache = { sourceKey: conn, questions: data.questions || [] };
+            _kqLoadedFor = conn;
+        }
+    } catch (e) {
+        console.warn('[Autocomplete] Failed to load knowledge questions:', e);
+    } finally {
+        _kqLoading = false;
+    }
+}
+
+// Resolve which table should scope `#` results. Order:
+//   1. The most recent qualified `Table.` token left of the caret.
+//   2. `lastInsertedTable` (set when the user picked an `@` suggestion).
+//   3. null (unscoped — show columns from all tables).
+function resolveColumnScope() {
+    const t = document.getElementById('question-input');
+    if (t && (allTables || []).length > 0) {
+        const value = t.value || '';
+        const pos = t.selectionStart || value.length;
+        const left = value.slice(0, pos);
+        // Match `Word.` directly before the caret (no whitespace between).
+        const m = left.match(/([A-Za-z_][A-Za-z0-9_]*)\.[#A-Za-z0-9_]*$/);
+        if (m && allTables.includes(m[1])) return m[1];
+    }
+    return lastInsertedTable || null;
+}
+
+async function fetchKnowledgeColumns(table) {
+    const conn = getActiveConnection();
+    if (!conn) return null;
+    const scope = (table || '').trim() || 'ALL';
+    const key = conn + '|' + scope;
+    if (_columnsCache.has(key)) return _columnsCache.get(key);
+    if (_columnsLoading.has(key)) return null;
+    _columnsLoading.add(key);
+    try {
+        const url = '/api/knowledge-columns?connection=' + encodeURIComponent(conn)
+            + (scope !== 'ALL' ? ('&table=' + encodeURIComponent(scope)) : '');
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (resp.ok) {
+            const cols = data.columns || [];
+            _columnsCache.set(key, cols);
+            // LRU cap (keep at most 200 entries; usually one per table).
+            if (_columnsCache.size > 200) {
+                const firstKey = _columnsCache.keys().next().value;
+                _columnsCache.delete(firstKey);
+            }
+            return cols;
+        }
+    } catch (e) {
+        console.warn('[Autocomplete] Failed to load columns:', e);
+    } finally {
+        _columnsLoading.delete(key);
+    }
+    return null;
+}
+
+const SuggestionController = (function () {
+    const MIN_FREE_CHARS = 3;
+    const LLM_MIN_CHARS = 10;
+    const LLM_DEBOUNCE_MS = 300;
+    const LLM_CACHE_TTL_MS = 60000;
+    const LLM_CACHE_MAX = 50;
+    const MAX_LOCAL_RESULTS = 8;
+
+    let mode = 'closed';        // 'trigger' | 'tiered' | 'closed'
+    let activeTrigger = null;   // TRIGGERS entry
+    let activeIndex = -1;
+    let currentItems = [];
+    let currentCorrections = [];
+    let currentQuery = '';
+    let header = null;          // { label, hint } | null
+    let loading = false;
+
+    const ta = () => document.getElementById('question-input');
+    const dd = () => document.getElementById('question-suggestions');
+
+    function close() {
+        mode = 'closed';
+        activeTrigger = null;
+        activeIndex = -1;
+        currentItems = [];
+        currentCorrections = [];
+        loading = false;
+        header = null;
+        if (_llmAbort) { try { _llmAbort.abort(); } catch (e) {} _llmAbort = null; }
+        if (_llmDebounceTimer) { clearTimeout(_llmDebounceTimer); _llmDebounceTimer = null; }
+        const d = dd();
+        if (d) { d.hidden = true; d.innerHTML = ''; }
+        const t = ta();
+        if (t) t.setAttribute('aria-expanded', 'false');
+    }
+
+    function reset() {
+        // Connection switched — drop connection-specific caches.
+        knowledgeQuestionsCache = null;
+        _kqLoadedFor = null;
+        _llmSuggestCache.clear();
+        _columnsCache.clear();
+        _columnsLoading.clear();
+        recentQuestionsCache = [];
+        pinnedQuestionsCache = [];
+        lastInsertedTable = null;
+        close();
+    }
+
+    function render() {
+        const d = dd();
+        const t = ta();
+        if (!d || !t) return;
+        const hasContent = currentItems.length > 0 || currentCorrections.length > 0 || loading || !!header;
+        if (!hasContent) {
+            d.hidden = true;
+            d.innerHTML = '';
+            t.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        d.hidden = false;
+        t.setAttribute('aria-expanded', 'true');
+
+        let html = '';
+        if (header) {
+            const hint = header.hint ? `<span class="suggestion-trigger-hint">${escapeHtml(header.hint)}</span>` : '';
+            html += `<div class="suggestion-trigger-header"><span>${escapeHtml(header.label)}</span>${hint}</div>`;
+        }
+        if (currentCorrections.length) {
+            html += currentCorrections.map((c, ci) => {
+                // Always coerce to plain strings — the LLM has been observed to
+                // wrap correction values in nested objects which would render
+                // as [object Object] if passed straight to escapeHtml().
+                const wrong = c && c.wrong != null ? String(c.wrong) : '';
+                const right = c && c.right != null ? String(c.right) : '';
+                if (!right || right === '[object Object]') return '';
+                const wrongHtml = wrong && wrong !== '[object Object]'
+                    ? `<code>${escapeHtml(wrong)}</code> \u2192 <code>${escapeHtml(right)}</code>`
+                    : `<code>${escapeHtml(right)}</code>`;
+                return `<div class="suggestion-correction-note" data-correction-index="${ci}" role="button" tabindex="0" title="Click to apply">Did you mean: ${wrongHtml}?</div>`;
+            }).join('');
+        }
+        if (loading) {
+            html += `<div class="suggestion-loading"><span class="suggestion-loading-dot"></span><span class="suggestion-loading-dot"></span><span class="suggestion-loading-dot"></span><span>Thinking\u2026</span></div>`;
+        }
+        if (currentItems.length) {
+            html += currentItems.map((it, i) => {
+                if (it.kind === 'group') {
+                    return `<div class="suggestion-group-header" data-role="group" aria-hidden="true">${escapeHtml(it.text)}</div>`;
+                }
+                const cls = i === activeIndex ? 'suggestion-item is-active' : 'suggestion-item';
+                const tagText = it.tag != null ? it.tag : it.tier;
+                const tier = it.tier || (tagText || '').toLowerCase();
+                const tag = tagText
+                    ? `<span class="suggestion-tier-tag" data-tier="${escapeHtml(tier)}">${escapeHtml(tagText)}</span>`
+                    : '';
+                const titleAttr = it.tooltip ? ` title="${escapeHtml(it.tooltip)}"` : '';
+                return `<div class="${cls}" data-index="${i}" role="option"${titleAttr}>` +
+                    `<span class="suggestion-item-text">${highlightMatch(it.text, currentQuery)}</span>${tag}</div>`;
+            }).join('');
+        } else if (!loading && mode === 'trigger') {
+            html += `<div class="suggestion-empty">No matches</div>`;
+        }
+        d.innerHTML = html;
+
+        // Wire mousedown (NOT click) so the textarea's blur doesn't kill us first.
+        d.querySelectorAll('.suggestion-item').forEach(node => {
+            node.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const i = parseInt(node.dataset.index, 10);
+                pick(i);
+            });
+        });
+        d.querySelectorAll('.suggestion-correction-note').forEach(node => {
+            node.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const i = parseInt(node.dataset.correctionIndex, 10);
+                applyCorrection(i);
+            });
+        });
+        if (activeIndex >= 0) {
+            const active = d.querySelector('.suggestion-item.is-active');
+            if (active && typeof active.scrollIntoView === 'function') {
+                active.scrollIntoView({ block: 'nearest' });
+            }
+        }
+    }
+
+    function isSelectable(item) {
+        return item && item.kind !== 'group';
+    }
+
+    function firstSelectableIndex() {
+        for (let i = 0; i < currentItems.length; i++) {
+            if (isSelectable(currentItems[i])) return i;
+        }
+        return -1;
+    }
+
+    function applyCorrection(i) {
+        const t = ta();
+        if (!t) return;
+        const c = currentCorrections[i];
+        if (!c) return;
+        const value = t.value || '';
+        if (c.wrong) {
+            // Replace first case-insensitive occurrence of `wrong` with `right`.
+            const re = new RegExp(c.wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            if (re.test(value)) {
+                t.value = value.replace(re, c.right);
+                t.selectionStart = t.selectionEnd = t.value.length;
+                t.focus();
+                onInput();
+                return;
+            }
+        }
+        // Fallback: append the corrected token at the caret.
+        t.value = (value ? value.replace(/\s*$/, ' ') : '') + c.right;
+        t.selectionStart = t.selectionEnd = t.value.length;
+        t.focus();
+        onInput();
+    }
+
+    function setItems(items, opts) {
+        opts = opts || {};
+        const cap = opts.cap || MAX_LOCAL_RESULTS;
+        // Cap counts only selectable rows (group headers are free).
+        const out = [];
+        let selected = 0;
+        for (const it of items) {
+            if (it && it.kind === 'group') {
+                out.push(it);
+                continue;
+            }
+            if (selected >= cap) break;
+            out.push(it);
+            selected += 1;
+        }
+        currentItems = out;
+        activeIndex = firstSelectableIndex();
+        currentCorrections = opts.corrections || [];
+        loading = !!opts.loading;
+        render();
+    }
+
+    function pick(i) {
+        if (i < 0 || i >= currentItems.length) return;
+        const item = currentItems[i];
+        if (!isSelectable(item)) return;
+        const t = ta();
+        if (!t) return;
+        if (mode === 'trigger') {
+            const ctx = getTriggerContext(t);
+            // Decide what to insert. Columns are special: scoped picks insert
+            // the bare column, unscoped picks insert `Table.column`.
+            let replacement = item.text;
+            if (item.kind === 'column') {
+                replacement = item.scoped ? item.column : (item.table + '.' + item.column);
+            }
+            if (ctx && activeTrigger && ctx.trigger.char === activeTrigger.char) {
+                insertReplacingTrigger(t, ctx, replacement);
+            } else {
+                t.value = (t.value || '') + replacement;
+            }
+            if (activeTrigger && typeof activeTrigger.onPick === 'function') {
+                activeTrigger.onPick(item);
+            }
+        } else if (mode === 'tiered') {
+            // Replace whole textarea content (typical autocomplete UX)
+            t.value = item.text;
+            t.selectionStart = t.selectionEnd = item.text.length;
+        }
+        close();
+    }
+
+    function moveActive(delta) {
+        if (currentItems.length === 0) return;
+        const dir = delta >= 0 ? 1 : -1;
+        let idx = activeIndex >= 0 ? activeIndex : (dir > 0 ? -1 : currentItems.length);
+        for (let step = 0; step < currentItems.length; step++) {
+            idx = (idx + dir + currentItems.length) % currentItems.length;
+            if (isSelectable(currentItems[idx])) {
+                activeIndex = idx;
+                render();
+                return;
+            }
+        }
+    }
+
+    function collectLocalMatches(partial) {
+        const q = partial.toLowerCase();
+        const out = [];
+        const seen = new Set();
+
+        // Tier 1: pinned + recent
+        const recents = [].concat(pinnedQuestionsCache || [], recentQuestionsCache || []);
+        for (let i = 0; i < recents.length && out.length < MAX_LOCAL_RESULTS; i++) {
+            const r = recents[i];
+            if (typeof r === 'string' && r.toLowerCase().includes(q) && !seen.has(r)) {
+                out.push({ text: r, tier: 'recent' });
+                seen.add(r);
+            }
+        }
+        // Tier 2a: knowledge_pairs questions
+        const kqs = (knowledgeQuestionsCache && knowledgeQuestionsCache.questions) || [];
+        for (let i = 0; i < kqs.length && out.length < MAX_LOCAL_RESULTS; i++) {
+            const txt = kqs[i] && kqs[i].question;
+            if (typeof txt === 'string' && txt.toLowerCase().includes(q) && !seen.has(txt)) {
+                out.push({ text: txt, tier: 'catalog' });
+                seen.add(txt);
+            }
+        }
+        // Tier 2b: table names
+        const tbls = allTables || [];
+        for (let i = 0; i < tbls.length && out.length < MAX_LOCAL_RESULTS; i++) {
+            const t2 = tbls[i];
+            if (typeof t2 === 'string' && t2.toLowerCase().includes(q) && !seen.has(t2)) {
+                out.push({ text: t2, tier: 'table' });
+                seen.add(t2);
+            }
+        }
+        return out;
+    }
+
+    function evictLLMCache() {
+        while (_llmSuggestCache.size > LLM_CACHE_MAX) {
+            const firstKey = _llmSuggestCache.keys().next().value;
+            _llmSuggestCache.delete(firstKey);
+        }
+    }
+
+    function scheduleLLM(partial) {
+        if (_llmDebounceTimer) clearTimeout(_llmDebounceTimer);
+        _llmDebounceTimer = setTimeout(() => fireLLM(partial), LLM_DEBOUNCE_MS);
+    }
+
+    async function fireLLM(partial) {
+        const conn = getActiveConnection();
+        if (!conn) return;
+        // Send only the last line up to caret to keep signal sharp.
+        const lastLine = partial.split('\n').pop().trim();
+        if (lastLine.length < LLM_MIN_CHARS) return;
+
+        const cacheKey = conn + '|' + lastLine.toLowerCase();
+        const cached = _llmSuggestCache.get(cacheKey);
+        if (cached && (Date.now() - cached.ts) < LLM_CACHE_TTL_MS) {
+            const items = (cached.suggestions || []).map(s => ({ text: s, tier: 'llm' }));
+            currentQuery = lastLine;
+            header = { label: 'Suggested', hint: 'AI completions' };
+            setItems(items, { corrections: cached.corrections || [] });
+            return;
+        }
+
+        if (_llmAbort) { try { _llmAbort.abort(); } catch (e) {} }
+        _llmAbort = new AbortController();
+        const requestId = ++_llmRequestId;
+
+        loading = true;
+        currentItems = [];
+        activeIndex = -1;
+        header = { label: 'Suggested', hint: 'AI completions' };
+        currentQuery = lastLine;
+        render();
+
+        try {
+            const recent = [].concat(pinnedQuestionsCache || [], recentQuestionsCache || []).slice(0, 10);
+            const resp = await fetch('/api/suggest-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    connection: conn,
+                    partial: lastLine,
+                    table_names: allTables || [],
+                    recent_questions: recent,
+                }),
+                signal: _llmAbort.signal,
+            });
+            if (requestId !== _llmRequestId) return; // stale
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Suggest failed');
+
+            _llmSuggestCache.set(cacheKey, {
+                ts: Date.now(),
+                suggestions: data.suggestions || [],
+                corrections: data.corrections || [],
+            });
+            evictLLMCache();
+
+            const items = (data.suggestions || []).map(s => ({ text: s, tier: 'llm' }));
+            loading = false;
+            // Defensive: server already normalises, but accept legacy shapes too.
+            const corr = (data.corrections || []).map(c => {
+                if (c && typeof c === 'object' && (c.wrong || c.right)) {
+                    const w = String(c.wrong != null ? c.wrong : '');
+                    const r = String(c.right != null ? c.right : '');
+                    if (w === '[object Object]' || r === '[object Object]') return null;
+                    return { wrong: w, right: r };
+                }
+                if (typeof c === 'string') {
+                    const m = c.split(/->|\u2192/);
+                    if (m.length === 2) return { wrong: m[0].trim(), right: m[1].trim() };
+                    return { wrong: '', right: c.trim() };
+                }
+                return null;
+            }).filter(c => c && c.right);
+            if (items.length === 0 && corr.length === 0) {
+                close();
+                return;
+            }
+            setItems(items, { corrections: corr });
+        } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            console.warn('[Autocomplete] LLM tier failed:', e);
+            loading = false;
+            close();
+        }
+    }
+
+    // Build the items array for `#` (columns), supporting scoped vs unscoped
+    // modes. Returns null when columns aren't loaded yet so the caller can
+    // schedule a fetch and re-render.
+    function buildColumnsItems(query) {
+        const conn = getActiveConnection();
+        if (!conn) return [];
+        const scopeTable = resolveColumnScope();
+        const cacheKey = conn + '|' + (scopeTable || 'ALL');
+        const cached = _columnsCache.get(cacheKey);
+        if (!cached) return null; // controller will fetch
+        const q = (query || '').toLowerCase();
+
+        const matches = cached.filter(c => {
+            if (!q) return true;
+            const name = (c.column || '').toLowerCase();
+            const desc = (c.description || '').toLowerCase();
+            return name.includes(q) || desc.includes(q);
+        });
+        // Rank: prefix-on-name first, then substring-on-name, then description-only.
+        const rankOf = (c) => {
+            const n = (c.column || '').toLowerCase();
+            if (q && n.startsWith(q)) return 0;
+            if (q && n.includes(q))   return 1;
+            return 2;
+        };
+        // In unscoped mode, prefer the last-mentioned table.
+        const tableBoost = (c) => (!scopeTable && lastInsertedTable && c.table === lastInsertedTable) ? -1 : 0;
+        matches.sort((a, b) => {
+            const ra = rankOf(a) + tableBoost(a);
+            const rb = rankOf(b) + tableBoost(b);
+            if (ra !== rb) return ra - rb;
+            if (a.table !== b.table) return String(a.table).localeCompare(String(b.table));
+            return String(a.column).localeCompare(String(b.column));
+        });
+
+        const items = [];
+        if (scopeTable) {
+            for (const c of matches) {
+                items.push({
+                    kind: 'column',
+                    text: c.column,
+                    table: c.table,
+                    column: c.column,
+                    scoped: true,
+                    tier: 'column',
+                    tag: c.data_type || 'col',
+                    tooltip: c.description || `${c.table}.${c.column}`,
+                });
+            }
+        } else {
+            // Unscoped — group by table.
+            let lastTable = null;
+            let cap = 60; // soft cap on rows so the dropdown stays scannable
+            for (const c of matches) {
+                if (cap <= 0) break;
+                if (c.table !== lastTable) {
+                    items.push({ kind: 'group', text: c.table });
+                    lastTable = c.table;
+                }
+                items.push({
+                    kind: 'column',
+                    text: c.table + '.' + c.column,
+                    table: c.table,
+                    column: c.column,
+                    scoped: false,
+                    tier: 'column',
+                    tag: c.data_type || 'col',
+                    tooltip: c.description || `${c.table}.${c.column}`,
+                });
+                cap -= 1;
+            }
+        }
+        return items;
+    }
+
+    function onInput() {
+        const t = ta();
+        if (!t) return;
+
+        // 1) Trigger detection wins.
+        const ctx = getTriggerContext(t);
+        if (ctx) {
+            mode = 'trigger';
+            activeTrigger = ctx.trigger;
+            currentQuery = ctx.query;
+            const headerLabel = typeof ctx.trigger.label === 'function' ? ctx.trigger.label() : ctx.trigger.label;
+            const headerHint  = typeof ctx.trigger.hint  === 'function' ? ctx.trigger.hint()  : ctx.trigger.hint;
+            header = { label: headerLabel, hint: headerHint };
+
+            // Lazy-fetch templates the first time `/` is used.
+            if (ctx.trigger.char === '/' && !knowledgeQuestionsCache && !_kqLoading) {
+                fetchKnowledgeQuestions().then(() => {
+                    if (mode === 'trigger' && activeTrigger && activeTrigger.char === '/') onInput();
+                });
+            }
+
+            // `#` columns: bespoke build w/ lazy fetch.
+            if (ctx.trigger.char === '#') {
+                const scopeTable = resolveColumnScope();
+                const built = buildColumnsItems(ctx.query);
+                if (built === null) {
+                    // Cache miss — show loading and fetch.
+                    loading = true;
+                    currentItems = [];
+                    activeIndex = -1;
+                    currentCorrections = [];
+                    render();
+                    fetchKnowledgeColumns(scopeTable).then(() => {
+                        if (mode === 'trigger' && activeTrigger && activeTrigger.char === '#') onInput();
+                    });
+                    return;
+                }
+                setItems(built, { cap: 60 });
+                return;
+            }
+
+            const items = ctx.trigger.getItems()
+                .filter(it => !ctx.query || (it.text || '').toLowerCase().includes(ctx.query.toLowerCase()))
+                .slice(0, MAX_LOCAL_RESULTS);
+            setItems(items, {});
+            return;
+        }
+
+        // 2) Tiered free-text mode.
+        const value = t.value || '';
+        const partial = value.trim();
+        if (partial.length < MIN_FREE_CHARS) {
+            close();
+            return;
+        }
+        mode = 'tiered';
+        activeTrigger = null;
+        currentQuery = partial;
+        header = null;
+
+        const local = collectLocalMatches(partial);
+        if (local.length > 0) {
+            // Cancel any pending LLM since we already have results.
+            if (_llmAbort) { try { _llmAbort.abort(); } catch (e) {} _llmAbort = null; }
+            if (_llmDebounceTimer) { clearTimeout(_llmDebounceTimer); _llmDebounceTimer = null; }
+            setItems(local, {});
+            return;
+        }
+
+        // No local hits — try LLM if long enough.
+        if (partial.length < LLM_MIN_CHARS) {
+            close();
+            return;
+        }
+        // Clear any visible suggestions while we wait, but keep dropdown closed
+        // until the LLM responds (no spinner flicker on every keystroke).
+        if (_llmAbort) { try { _llmAbort.abort(); } catch (e) {} _llmAbort = null; }
+        scheduleLLM(partial);
+    }
+
+    function onKeydown(e) {
+        if (mode === 'closed') return false;
+        if (e.key === 'Escape')   { e.preventDefault(); close(); return true; }
+        if (e.key === 'ArrowDown'){ e.preventDefault(); moveActive(1); return true; }
+        if (e.key === 'ArrowUp')  { e.preventDefault(); moveActive(-1); return true; }
+        // Tab always accepts when there's an active suggestion.
+        if (e.key === 'Tab' && activeIndex >= 0 && currentItems.length) {
+            e.preventDefault();
+            pick(activeIndex);
+            return true;
+        }
+        // Enter accepts ONLY in trigger mode (so plain Enter still submits a
+        // free-text question even if a tiered suggestion is highlighted).
+        if (e.key === 'Enter' && mode === 'trigger' && activeIndex >= 0 && currentItems.length) {
+            e.preventDefault();
+            pick(activeIndex);
+            return true;
+        }
+        return false;
+    }
+
+    function onFocus() {
+        // Lazy-fetch templates so `/` is instant on first use.
+        if (!knowledgeQuestionsCache && !_kqLoading && getActiveConnection()) {
+            fetchKnowledgeQuestions().catch(() => {});
+        }
+        // If the user lands back in a textarea that already has content,
+        // re-run input to re-open suggestions.
+        onInput();
+    }
+
+    function onBlur() {
+        // Delay so click on an item registers first.
+        setTimeout(() => close(), 150);
+    }
+
+    return { onInput, onKeydown, onFocus, onBlur, close, reset, pick, moveActive };
+})();
+
+// ======================================================
+// DOMContentLoaded
+// ======================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Remove no-transitions class after first render to enable theme transitions
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        document.documentElement.classList.remove('no-transitions');
+    }));
+
+    // Initialize theme icon
+    updateThemeIcon(getTheme());
+
+    // Theme toggle button
+    const themeToggleBtn = document.getElementById('theme-toggle');
+    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleTheme);
+
+    // Sidebar toggle
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle');
+    if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+
+    // Sidebar overlay dismiss
+    const overlay = document.getElementById('sidebar-overlay');
+    if (overlay) overlay.addEventListener('click', toggleSidebar);
+
+    // Question input keyboard shortcuts + autocomplete wiring
+    const questionInput = document.getElementById('question-input');
+    if (questionInput) {
+        questionInput.addEventListener('keydown', (e) => {
+            // Let the SuggestionController consume keys it cares about first.
+            if (SuggestionController.onKeydown(e)) return;
+
+            // Ctrl/Cmd+Enter or plain Enter (without shift) = submit
+            if (((e.ctrlKey || e.metaKey) && e.key === 'Enter') ||
+                (e.key === 'Enter' && !e.shiftKey)) {
+                e.preventDefault();
+                askQuestion();
+            }
+            // Escape = clear (only when controller didn't already handle it)
+            if (e.key === 'Escape') {
+                questionInput.value = '';
+                questionInput.blur();
+            }
+        });
+        questionInput.addEventListener('input', () => SuggestionController.onInput());
+        questionInput.addEventListener('focus', () => SuggestionController.onFocus());
+        questionInput.addEventListener('blur',  () => SuggestionController.onBlur());
+        // Re-evaluate when caret moves via mouse click.
+        questionInput.addEventListener('click', () => SuggestionController.onInput());
+    }
+
+    // Click outside the query input wrap closes the suggestions.
+    document.addEventListener('click', (e) => {
+        const wrap = document.querySelector('.query-input-wrap');
+        if (!wrap) return;
+        if (!wrap.contains(e.target)) SuggestionController.close();
+    });
+
     // Load history on page load
     displayHistory();
-    
-    // Expose functions to global scope for inline onclick/onkeyup handlers
-    // (Required because script is loaded as a module)
-    // Must be inside DOMContentLoaded to ensure functions are defined
+
+    // Expose functions to window for inline onclick/onkeyup handlers
     window.askQuestion = askQuestion;
     window.fillQuestion = fillQuestion;
     window.copySql = copySql;
@@ -1407,6 +2613,14 @@ document.addEventListener('DOMContentLoaded', () => {
     window.unpinQuestion = unpinQuestion;
     window.togglePromptSection = togglePromptSection;
     window.switchPromptTab = switchPromptTab;
-    
+    window.toggleSidebar = toggleSidebar;
+    window.toggleTheme = toggleTheme;
+    window.getActiveConnection = getActiveConnection;
+    window.setActiveConnection = setActiveConnection;
+    window.onConnectionChange = onConnectionChange;
+    window.loadConnections = loadConnections;
+    window.selectTable = selectTable;
+    window.setPageTitle = setPageTitle;
+
     console.log('[Module] Functions exposed to window:', Object.keys(window).filter(k => ['askQuestion', 'sortTable', 'filterResults'].includes(k)));
 });

@@ -202,10 +202,12 @@ export class ChartManager {
             console.log('[ChartManager] Calling LLM API for type:', chartType);
             
             // Call LLM API
+            const connection = (typeof getActiveConnection === 'function') ? getActiveConnection() : '';
             const response = await fetch('/api/generate-chart', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    connection,
                     columns: columns,
                     column_names: this.state.currentData.columns,
                     sample_data: sampleData,

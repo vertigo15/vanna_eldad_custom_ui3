@@ -187,9 +187,10 @@ class ProfilingManager {
         try {
             // Show loading state
             content.innerHTML = `
-                <div class="profiling-loading">
-                    <div class="spinner"></div>
-                    <p>Generating ${reportTypeName} report... This may take a moment.</p>
+                <div class="profiling-loading" role="status" aria-label="Generating ${reportTypeName} report...">
+                    <div class="skeleton" style="height: 1rem; width: 70%;"></div>
+                    <div class="skeleton" style="height: 1rem; width: 55%;"></div>
+                    <div class="skeleton" style="height: 200px; width: 100%;"></div>
                 </div>
             `;
 
