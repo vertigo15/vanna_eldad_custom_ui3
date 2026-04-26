@@ -1,8 +1,53 @@
 """SQL execution tool for PostgreSQL."""
 
+import logging
+import re
+from typing import Any, Dict, List, Optional
+
 import asyncpg
-from typing import List, Dict, Any, Optional
-import json
+
+logger = logging.getLogger(__name__)
+
+# Statements the agent is allowed to send to a user data source.
+# Anything else — INSERT, UPDATE, DELETE, DDL, COPY, GRANT, etc. — is rejected
+# before we ever reach the database. The read-only transaction wrapper inside
+# `run_sql` is a second line of defence that catches anything this regex misses
+# (e.g. a function call that mutates state).
+_ALLOWED_LEAD_KEYWORDS = re.compile(
+    r"^(SELECT|WITH)\b",
+    re.IGNORECASE,
+)
+# Strip leading SQL comments + whitespace so a query that starts with
+# "-- comment\nSELECT ..." or "/* foo */ SELECT ..." still passes the
+# leading-keyword check.
+_LEADING_COMMENTS = re.compile(
+    r"\s*(?:--[^\n]*\n|/\*.*?\*/)\s*",
+    re.DOTALL,
+)
+
+
+def _strip_leading_noise(sql: str) -> str:
+    """Drop leading whitespace and any chained leading SQL comments."""
+    text = sql or ""
+    while True:
+        new_text = _LEADING_COMMENTS.sub("", text, count=1)
+        if new_text == text:
+            break
+        text = new_text
+    return text.lstrip()
+
+
+def is_read_only_sql(sql: str) -> bool:
+    """Return True iff `sql` starts with SELECT or WITH (after stripping comments).
+
+    This is intentionally strict: the agent's contract is to produce read-only
+    queries, and the safest place to enforce that is here, before the SQL
+    reaches the connection pool.
+    """
+    if not sql or not sql.strip():
+        return False
+    cleaned = _strip_leading_noise(sql)
+    return bool(_ALLOWED_LEAD_KEYWORDS.match(cleaned))
 
 
 class PostgresSqlRunner:
@@ -31,52 +76,77 @@ class PostgresSqlRunner:
     async def run_sql(
         self,
         sql: str,
-        limit: Optional[int] = 100
+        limit: Optional[int] = 100,
     ) -> Dict[str, Any]:
+        """Execute a read-only SQL query and return its result rows.
+
+        Two layers of safety:
+
+        1. **Pre-check**: only SQL whose leading keyword (after stripping
+           comments) is ``SELECT`` or ``WITH`` is allowed through. Anything
+           else is rejected without ever touching the connection pool.
+        2. **Read-only transaction**: the query runs inside a Postgres
+           ``READ ONLY`` transaction. If a function call or anything the
+           pre-check missed tries to mutate state, Postgres raises an error
+           and the transaction rolls back automatically.
+
+        Note: for the strongest possible guarantee, also connect with a
+        Postgres role whose only privilege on the schema is ``SELECT``.
         """
-        Execute SQL query and return results.
-        
-        Args:
-            sql: SQL query to execute
-            limit: Maximum number of rows to return
-            
-        Returns:
-            Dict with 'columns', 'rows', 'row_count', and optional 'error'
-        """
+        if not is_read_only_sql(sql):
+            logger.warning(
+                "run_sql: blocked non-read-only SQL (first 80 chars): %s",
+                (sql or "").strip()[:80],
+            )
+            return {
+                "error": (
+                    "Only read-only queries are allowed. The query must start "
+                    "with SELECT or WITH."
+                ),
+                "columns": [],
+                "rows": [],
+                "row_count": 0,
+            }
+
+        # Add LIMIT if not present (only safe to do for the SELECT/WITH
+        # statements this runner accepts).
+        if limit and "LIMIT" not in sql.upper():
+            sql = f"{sql.rstrip().rstrip(';')} LIMIT {limit}"
+
         try:
-            # Add LIMIT if not present and it's a SELECT
-            if limit and sql.strip().upper().startswith('SELECT'):
-                if 'LIMIT' not in sql.upper():
-                    sql = f"{sql.rstrip(';')} LIMIT {limit}"
-            
             async with self.pool.acquire() as conn:
-                rows = await conn.fetch(sql)
-                
-                if not rows:
-                    return {
-                        "columns": [],
-                        "rows": [],
-                        "row_count": 0
-                    }
-                
-                # Extract column names
-                columns = list(rows[0].keys())
-                
-                # Convert rows to list of dicts
-                result_rows = [dict(row) for row in rows]
-                
-                return {
-                    "columns": columns,
-                    "rows": result_rows,
-                    "row_count": len(result_rows)
-                }
-                
-        except Exception as e:
+                async with conn.transaction(readonly=True):
+                    rows = await conn.fetch(sql)
+
+            if not rows:
+                return {"columns": [], "rows": [], "row_count": 0}
+
+            columns = list(rows[0].keys())
+            result_rows = [dict(row) for row in rows]
+            return {
+                "columns": columns,
+                "rows": result_rows,
+                "row_count": len(result_rows),
+            }
+        except asyncpg.exceptions.ReadOnlySQLTransactionError as e:
+            # The READ ONLY transaction rejected something the pre-check
+            # accepted (e.g. a SELECT that calls a function with side effects).
+            logger.warning("run_sql: read-only transaction rejected query: %s", e)
+            return {
+                "error": (
+                    "This query attempted to modify the database and was "
+                    "blocked. Only read-only queries are allowed."
+                ),
+                "columns": [],
+                "rows": [],
+                "row_count": 0,
+            }
+        except Exception as e:  # noqa: BLE001
             return {
                 "error": str(e),
                 "columns": [],
                 "rows": [],
-                "row_count": 0
+                "row_count": 0,
             }
     
     async def get_table_schema(self, table_name: str) -> List[Dict[str, Any]]:
