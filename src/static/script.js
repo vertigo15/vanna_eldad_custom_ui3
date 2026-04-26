@@ -231,15 +231,6 @@ function displayResults(data) {
         initCodeMirror('-- No SQL generated');
     }
     
-    // Display explanation
-    const explanationCard = document.getElementById('explanation-card');
-    if (data.explanation) {
-        document.getElementById('explanation-display').textContent = data.explanation;
-        explanationCard.style.display = 'block';
-    } else {
-        explanationCard.style.display = 'none';
-    }
-    
     // Display results
     const resultsDisplay = document.getElementById('results-display');
     const exportBtn = document.getElementById('export-btn');

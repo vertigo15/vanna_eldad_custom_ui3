@@ -192,7 +192,6 @@ class QueryResponse(BaseModel):
     session_id: Optional[UUID] = None
     sql: Optional[str]
     results: Optional[Dict[str, Any]]
-    explanation: Optional[str]
     prompt: Optional[Dict[str, Any]] = None
     error: Optional[str]
 

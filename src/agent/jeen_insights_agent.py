@@ -160,7 +160,6 @@ class JeenInsightsAgent:
                 "session_id": session_id,
                 "sql": None,
                 "results": None,
-                "explanation": response.get("content", ""),
                 "prompt": structured_prompt,
                 "error": None,
             }
@@ -224,7 +223,6 @@ class JeenInsightsAgent:
                 "session_id": session_id,
                 "sql": None,
                 "results": None,
-                "explanation": None,
                 "prompt": None,
                 "error": str(e),
             }
