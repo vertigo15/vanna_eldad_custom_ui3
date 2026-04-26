@@ -265,6 +265,38 @@ class SuggestQuestionsRequest(BaseModel):
     table_names: Optional[List[str]] = None
 
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class EditChartRequest(BaseModel):
+    connection: str
+    instruction: str
+    current_config: Dict[str, Any]
+    columns: List[ColumnInfo]
+    column_names: List[str]
+    sample_data: List[List[Any]]
+    recent_messages: Optional[List[ChatMessage]] = None
+
+
+class DerivedSeriesSpec(BaseModel):
+    operator: str
+    source_column: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+    label: Optional[str] = None
+
+
+class EditChartResponse(BaseModel):
+    chart_config: Dict[str, Any]
+    chart_type: str
+    derived_series: List[DerivedSeriesSpec] = []
+    notes: Optional[str] = None
+    out_of_scope: bool = False
+    prompt: Optional[str] = None
+    system_message: Optional[str] = None
+
+
 # ----------------------------------------------------------------------
 # Public root + health
 # ----------------------------------------------------------------------
@@ -782,6 +814,218 @@ async def generate_chart(request: GenerateChartRequest):
     except Exception as e:  # noqa: BLE001
         logger.exception("Chart generation error")
         raise HTTPException(status_code=500, detail=f"Chart generation failed: {e}") from e
+
+
+# ----------------------------------------------------------------------
+# Chart Chat: per-session, natural-language edits to the rendered chart
+# ----------------------------------------------------------------------
+_CHART_EDITOR_PROMPT_PATH = (
+    Path(__file__).resolve().parent / "agent" / "prompts" / "chart_editor.md"
+)
+_CHART_EDITOR_ALLOWED_OPERATORS = {
+    "moving_avg",
+    "cumulative_sum",
+    "percent_change",
+    "linear_trend",
+    "normalize_0_1",
+    "log_scale",
+}
+_CHART_EDITOR_MAX_INSTRUCTION_CHARS = 500
+_CHART_EDITOR_MAX_RECENT_MESSAGES = 6
+_CHART_EDITOR_MAX_RECENT_CHARS = 1500
+
+
+def _load_chart_editor_prompt() -> str:
+    """Re-read the externalised prompt on every call so editing the .md file
+    has zero deploy cost in dev."""
+    return _CHART_EDITOR_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _format_recent_messages(messages: Optional[List[ChatMessage]]) -> str:
+    if not messages:
+        return "(none)"
+    trimmed = messages[-_CHART_EDITOR_MAX_RECENT_MESSAGES:]
+    lines: List[str] = []
+    used = 0
+    for m in trimmed:
+        role = m.role if m.role in ("user", "assistant") else "user"
+        content = (m.content or "").strip()
+        if not content:
+            continue
+        line = f"[{role}] {content}"
+        if used + len(line) > _CHART_EDITOR_MAX_RECENT_CHARS:
+            break
+        lines.append(line)
+        used += len(line)
+    return "\n".join(lines) or "(none)"
+
+
+def _normalise_derived_series(
+    items: Any, allowed_columns: List[str]
+) -> List[Dict[str, Any]]:
+    """Validate and clean the derived_series array returned by the LLM.
+
+    - Drop any item whose operator is not in the allowed set.
+    - Drop any item whose source_column is not in the request's column list
+      (case-insensitive match).
+    - Coerce params to a dict; coerce params.window to a positive int.
+    - Cap the list to 4 entries to keep the chart readable.
+    """
+    if not isinstance(items, list):
+        return []
+    lowered_columns = {c.lower(): c for c in allowed_columns}
+    out: List[Dict[str, Any]] = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        op = str(raw.get("operator") or "").strip().lower()
+        if op not in _CHART_EDITOR_ALLOWED_OPERATORS:
+            continue
+        src = raw.get("source_column")
+        canonical_src: Optional[str] = None
+        if isinstance(src, str) and src.strip():
+            canonical_src = lowered_columns.get(src.strip().lower())
+            if canonical_src is None:
+                # Unknown column — skip rather than mislead the client.
+                continue
+        params = raw.get("params") if isinstance(raw.get("params"), dict) else {}
+        window = params.get("window")
+        if window is not None:
+            try:
+                window_int = int(window)
+                params = {**params, "window": max(1, window_int)}
+            except (TypeError, ValueError):
+                params = {k: v for k, v in params.items() if k != "window"}
+        label = raw.get("label")
+        if not isinstance(label, str) or not label.strip():
+            label = f"{op} ({canonical_src})" if canonical_src else op
+        out.append(
+            {
+                "operator": op,
+                "source_column": canonical_src,
+                "params": params,
+                "label": label.strip()[:80],
+            }
+        )
+        if len(out) >= 4:
+            break
+    return out
+
+
+@app.post("/api/edit-chart", response_model=EditChartResponse)
+async def edit_chart(request: EditChartRequest):
+    """Apply a natural-language edit to the current ECharts config.
+
+    The endpoint never touches the SQL result set. It returns a new chart
+    config (potentially identical to the input on out-of-scope requests)
+    plus an optional list of `derived_series` specs that the client computes
+    from the existing dataset.
+    """
+    instruction = (request.instruction or "").strip()
+    if not instruction:
+        raise HTTPException(status_code=400, detail="`instruction` is required")
+    if not request.current_config:
+        raise HTTPException(status_code=400, detail="`current_config` is required")
+
+    agent = await _resolve_agent(request.connection)
+    instruction = instruction[:_CHART_EDITOR_MAX_INSTRUCTION_CHARS]
+
+    column_types_blob = (
+        "\n".join(f"- {c.name} ({c.type})" for c in request.columns) or "(unknown)"
+    )
+    sample_blob = json.dumps(request.sample_data[:5], ensure_ascii=False, indent=2)
+    config_blob = json.dumps(request.current_config, ensure_ascii=False)
+    column_names_blob = json.dumps(request.column_names, ensure_ascii=False)
+    recent_blob = _format_recent_messages(request.recent_messages)
+
+    template = _load_chart_editor_prompt()
+    try:
+        system_prompt = template.format(
+            instruction=instruction,
+            column_names=column_names_blob,
+            column_types=column_types_blob,
+            sample_rows=sample_blob,
+            current_config=config_blob,
+            recent_messages=recent_blob,
+        )
+    except (KeyError, IndexError, ValueError):
+        logger.exception("Failed to format chart_editor prompt")
+        raise HTTPException(status_code=500, detail="Chart editor prompt is malformed")
+
+    try:
+        response = await agent.llm.generate(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": instruction},
+            ],
+            temperature=0.2,
+            max_tokens=4096,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Chart edit LLM call failed")
+        # Don't raise — the chat is non-critical; surface a polite refusal.
+        return EditChartResponse(
+            chart_config=request.current_config,
+            chart_type=_extract_chart_type(request.current_config),
+            derived_series=[],
+            notes=f"Sorry, the chart-edit service is unavailable right now ({e}).",
+            out_of_scope=True,
+            prompt=system_prompt,
+            system_message=None,
+        )
+
+    raw = response.get("content") or ""
+    parsed = _extract_json_object(raw)
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "Chart-edit LLM returned unparseable JSON (%d chars)", len(raw)
+        )
+        return EditChartResponse(
+            chart_config=request.current_config,
+            chart_type=_extract_chart_type(request.current_config),
+            derived_series=[],
+            notes="I couldn't apply that edit. Please rephrase, or try one of the suggestions.",
+            out_of_scope=True,
+            prompt=system_prompt,
+        )
+
+    out_of_scope = bool(parsed.get("out_of_scope"))
+    chart_config = parsed.get("chart_config")
+    if not isinstance(chart_config, dict):
+        chart_config = request.current_config
+        out_of_scope = True
+
+    derived = _normalise_derived_series(
+        parsed.get("derived_series"), request.column_names
+    )
+
+    chart_type = parsed.get("chart_type")
+    if not isinstance(chart_type, str) or not chart_type.strip():
+        chart_type = _extract_chart_type(chart_config)
+
+    notes = parsed.get("notes")
+    if isinstance(notes, str):
+        notes = notes.strip()[:300] or None
+    else:
+        notes = None
+
+    return EditChartResponse(
+        chart_config=chart_config,
+        chart_type=chart_type,
+        derived_series=[DerivedSeriesSpec(**d) for d in derived],
+        notes=notes,
+        out_of_scope=out_of_scope,
+        prompt=system_prompt,
+    )
+
+
+def _extract_chart_type(config: Dict[str, Any]) -> str:
+    series = config.get("series") if isinstance(config, dict) else None
+    if isinstance(series, list) and series and isinstance(series[0], dict):
+        t = series[0].get("type")
+        if isinstance(t, str) and t:
+            return t
+    return "bar"
 
 
 @app.post("/api/enhance-chart")

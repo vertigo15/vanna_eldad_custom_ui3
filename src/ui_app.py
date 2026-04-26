@@ -204,6 +204,21 @@ def enhance_chart():
     return _proxy_post("/api/enhance-chart", data)
 
 
+@app.route("/api/edit-chart", methods=["POST"])
+def edit_chart():
+    """Proxy for the chat-driven chart editor.
+
+    Forwards the user's instruction + current ECharts config to the API.
+    The API call hits the LLM, so allow a generous timeout.
+    """
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+    if not (data.get("instruction") or "").strip():
+        return jsonify({"error": "`instruction` is required"}), 400
+    return _proxy_post("/api/edit-chart", data, timeout=120)
+
+
 # ----------------------------------------------------------------------
 # Autocomplete (Tier 2 catalog + Tier 3 LLM)
 # ----------------------------------------------------------------------

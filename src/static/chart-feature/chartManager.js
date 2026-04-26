@@ -11,6 +11,8 @@ import { analyzeData } from './utils/dataAnalyzer.js';
 import { ChartContainer } from './components/ChartContainer.js';
 import { ChartToggle } from './components/ChartToggle.js';
 import { ChartTypeSelector } from './components/ChartTypeSelector.js';
+import { ChartChat } from './components/ChartChat.js';
+import { applyDerivedSeries, stripDerivedSeries } from './utils/chartOperators.js';
 
 /**
  * Main chart manager class
@@ -31,8 +33,13 @@ export class ChartManager {
         this.chartContainer = null;
         this.chartToggle = null;
         this.chartTypeSelector = null;
+        this.chartChat = null;
         this.llmRecommendedType = null;
-        
+        // Baseline (LLM-generated) config — Reset reverts to this.
+        this.originalConfig = null;
+        // The current ECharts options object actually rendered.
+        this.currentEchartsOptions = null;
+
         console.log('[ChartManager] Initialized');
     }
     
@@ -83,7 +90,22 @@ export class ChartManager {
         
         // Chart container
         this.chartContainer = new ChartContainer('chart-display-container');
-        
+
+        // Chart chat panel (under the chart). Mounted once; enabled after
+        // the first successful render. Lives only when the chart-chat
+        // container exists in the DOM, so omitting it from the page is fine.
+        if (document.getElementById('chart-chat-container')) {
+            this.chartChat = new ChartChat('chart-chat-container', {
+                getCurrentConfig: () => this.currentEchartsOptions,
+                getCurrentResults: () => this.state.currentData,
+                getConnection: () => (typeof getActiveConnection === 'function' ? getActiveConnection() : ''),
+                onApply: (newConfig, derivedSpecs) => this.applyEditedConfig(newConfig, derivedSpecs),
+                onReset: () => this.resetChartEdits(),
+            });
+            this.chartChat.mount();
+            this.chartChat.disable();
+        }
+
         console.log('[ChartManager] Components initialized');
     }
     
@@ -158,9 +180,15 @@ export class ChartManager {
      */
     async generateChartWithLLM(chartType = 'auto') {
         console.log('[ChartManager] Generating chart with LLM, type:', chartType);
-        
+
+        // Regenerating from scratch — clear any prior chat-edit state so the
+        // user starts on a clean baseline.
+        if (this.chartChat) this.chartChat.reset();
+        this.originalConfig = null;
+
         // Show loading state
         this.chartContainer.showLoading();
+        if (this.chartChat) this.chartChat.disable();
         
         try {
             // Prepare data for LLM
@@ -264,26 +292,114 @@ export class ChartManager {
     }
     
     /**
-     * Renders chart with given config
+     * Renders chart with given config (the original LLM-generated config).
+     * Snapshots the config as the Reset baseline.
      */
     async renderChart(echartsConfig) {
         console.log('[ChartManager] Rendering chart with LLM config');
-        
+
+        // Capture the unmodified baseline so Reset can always restore it.
+        // Deep-clone so later edits to currentEchartsOptions don't mutate it.
+        try {
+            this.originalConfig = JSON.parse(JSON.stringify(echartsConfig));
+        } catch (_) {
+            this.originalConfig = echartsConfig;
+        }
+
         const chartConfig = {
             type: echartsConfig.series?.[0]?.type || 'bar',
             options: echartsConfig,
             isEnhanced: true
         };
-        
+
         this.state.currentConfig = chartConfig;
-        
+        this.currentEchartsOptions = echartsConfig;
+
         try {
             await this.chartContainer.init();
             this.chartContainer.render(chartConfig);
+            if (this.chartChat) this.chartChat.enable();
             console.log('[ChartManager] Chart rendered successfully');
         } catch (error) {
             console.error('[ChartManager] Failed to render chart:', error);
             this.chartContainer.showError('Failed to render chart: ' + error.message);
+        }
+    }
+
+    /**
+     * Applies a chat-edited config to the chart.
+     *
+     * - Strips any previously-applied derived overlays so they don't stack.
+     * - Computes the requested derived overlays locally from currentData.
+     * - Re-renders via ChartContainer; falls back to the previous config on
+     *   failure so the user never ends up with a broken chart.
+     *
+     * @param {object} newConfig
+     * @param {Array} derivedSpecs
+     */
+    applyEditedConfig(newConfig, derivedSpecs) {
+        if (!newConfig || typeof newConfig !== 'object') return;
+
+        const previous = this.currentEchartsOptions;
+        // Strip any prior __derived series the LLM may have echoed back, then
+        // re-apply only the freshly-described overlays.
+        const cleaned = stripDerivedSeries(newConfig);
+        const { config: withDerived } = applyDerivedSeries(
+            cleaned,
+            derivedSpecs || [],
+            this.state.currentData
+        );
+
+        const chartConfig = {
+            type: withDerived.series?.[0]?.type || 'bar',
+            options: withDerived,
+            isEnhanced: true,
+        };
+
+        try {
+            this.chartContainer.render(chartConfig);
+            this.currentEchartsOptions = withDerived;
+            this.state.currentConfig = chartConfig;
+        } catch (error) {
+            console.error('[ChartManager] Failed to apply edited config:', error);
+            // Roll back to the last known-good config so the user keeps a
+            // working chart.
+            if (previous) {
+                try {
+                    this.chartContainer.render({
+                        type: previous.series?.[0]?.type || 'bar',
+                        options: previous,
+                        isEnhanced: true,
+                    });
+                } catch (_) { /* swallow — we already logged the original error */ }
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Reverts the chart to the original LLM-generated config.
+     * The chat transcript is cleared by ChartChat itself.
+     */
+    resetChartEdits() {
+        if (!this.originalConfig) return;
+        let baseline;
+        try {
+            baseline = JSON.parse(JSON.stringify(this.originalConfig));
+        } catch (_) {
+            baseline = this.originalConfig;
+        }
+        const chartConfig = {
+            type: baseline.series?.[0]?.type || 'bar',
+            options: baseline,
+            isEnhanced: true,
+        };
+        try {
+            this.chartContainer.render(chartConfig);
+            this.currentEchartsOptions = baseline;
+            this.state.currentConfig = chartConfig;
+        } catch (error) {
+            console.error('[ChartManager] Failed to reset chart:', error);
         }
     }
     
