@@ -1,0 +1,146 @@
+"""Pydantic request/response schemas for the public API.
+
+Kept as a single module because the schemas are small and frequently
+referenced in pairs (request + response). Splitting per-feature would create
+a lot of one-class files without buying much.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+# ----------------------------------------------------------------------
+# Query / data exploration
+# ----------------------------------------------------------------------
+class QueryRequest(BaseModel):
+    question: str
+    connection: str
+    session_id: Optional[UUID] = None
+    user_context: Optional[Dict[str, Any]] = None
+
+
+class QueryResponse(BaseModel):
+    question: str
+    query_id: Optional[UUID] = None
+    session_id: Optional[UUID] = None
+    sql: Optional[str]
+    results: Optional[Dict[str, Any]]
+    prompt: Optional[Dict[str, Any]] = None
+    error: Optional[str]
+
+
+class ColumnInfo(BaseModel):
+    name: str
+    type: str
+
+
+# ----------------------------------------------------------------------
+# Charts
+# ----------------------------------------------------------------------
+class GenerateChartRequest(BaseModel):
+    connection: str
+    columns: List[ColumnInfo]
+    column_names: List[str]
+    sample_data: List[List[Any]]
+    all_data: Optional[List[List[Any]]] = None
+    chart_type: Optional[str] = "auto"
+
+
+class GenerateChartResponse(BaseModel):
+    chart_config: Dict[str, Any]
+    chart_type: str
+    prompt: Optional[str] = None
+    system_message: Optional[str] = None
+
+
+class EnhanceChartRequest(BaseModel):
+    connection: str
+    columns: List[ColumnInfo]
+    sample_data: List[List[Any]]
+    chart_type: str
+    current_config: Dict[str, Any]
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class EditChartRequest(BaseModel):
+    connection: str
+    instruction: str
+    current_config: Dict[str, Any]
+    columns: List[ColumnInfo]
+    column_names: List[str]
+    sample_data: List[List[Any]]
+    recent_messages: Optional[List[ChatMessage]] = None
+
+
+class DerivedSeriesSpec(BaseModel):
+    operator: str
+    source_column: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+    label: Optional[str] = None
+
+
+class EditChartResponse(BaseModel):
+    chart_config: Dict[str, Any]
+    chart_type: str
+    derived_series: List[DerivedSeriesSpec] = []
+    notes: Optional[str] = None
+    out_of_scope: bool = False
+    prompt: Optional[str] = None
+    system_message: Optional[str] = None
+
+
+# ----------------------------------------------------------------------
+# Insights / profiling
+# ----------------------------------------------------------------------
+class GenerateInsightsRequest(BaseModel):
+    connection: str
+    dataset: Dict[str, Any]
+    question: str
+    query_id: Optional[UUID] = None
+
+
+class GenerateInsightsResponse(BaseModel):
+    summary: str
+    findings: List[str]
+    suggestions: List[str]
+    prompt: Optional[str] = None
+    system_message: Optional[str] = None
+
+
+class GenerateProfileRequest(BaseModel):
+    dataset: Dict[str, Any]
+    report_type: str = "ydata"
+
+
+# ----------------------------------------------------------------------
+# History / feedback
+# ----------------------------------------------------------------------
+class FeedbackRequest(BaseModel):
+    query_id: UUID
+    feedback: str
+    corrected_sql: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PinQuestionRequest(BaseModel):
+    connection: str
+    user_id: str = "default"
+    question: str
+
+
+# ----------------------------------------------------------------------
+# Autocomplete
+# ----------------------------------------------------------------------
+class SuggestQuestionsRequest(BaseModel):
+    connection: str
+    partial: str
+    recent_questions: Optional[List[str]] = None
+    table_names: Optional[List[str]] = None
