@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from src.api.dependencies import get_history_service, resolve_agent
 from src.api.models import (
@@ -17,6 +19,11 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["insights"])
+
+
+def _sse(event: str, payload: dict) -> str:
+    """Format a single Server-Sent Event frame."""
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 @router.post("/generate-insights", response_model=GenerateInsightsResponse)
@@ -83,6 +90,107 @@ async def generate_insights_endpoint(request: GenerateInsightsRequest):
             findings=[],
             suggestions=[],
         )
+
+
+@router.post("/generate-insights/stream")
+async def generate_insights_stream_endpoint(request: GenerateInsightsRequest):
+    """Streaming version of /api/generate-insights using Server-Sent Events.
+
+    The response is ``text/event-stream`` with named events: ``open``,
+    ``ttft``, ``delta``, ``done``, ``error``. The client renders deltas as
+    they arrive and replaces the placeholder with the structured insights
+    once ``done`` fires. Real TTFT (first non-empty content chunk) is
+    measured server-side and emitted as its own event.
+    """
+    agent = await resolve_agent(request.connection)
+    logger.info("Streaming insights for: %s", request.question[:50])
+
+    from src.agent.insight_service import generate_insights_stream
+
+    bundle = await agent.metadata_loader.load_all(agent.source_key)
+    context = {"documentation": [bundle.get("business_terms", "")]}
+    history = get_history_service() if request.query_id else None
+
+    async def event_generator():
+        # Emit one initial heartbeat so proxies/buffers flush immediately
+        # and the client can start its placeholder UI.
+        yield ": ping\n\n"
+
+        final_insights: dict = {}
+        final_metrics: dict = {}
+
+        try:
+            async for ev in generate_insights_stream(
+                dataset=request.dataset,
+                context=context,
+                original_question=request.question,
+                llm_service=agent.llm,
+            ):
+                kind = ev.get("type")
+                if kind == "open":
+                    yield _sse("open", {
+                        "prompt": ev.get("prompt", ""),
+                        "system_message": ev.get("system_message", ""),
+                    })
+                elif kind == "ttft":
+                    yield _sse("ttft", {"ms": ev.get("ms")})
+                elif kind == "delta":
+                    yield _sse("delta", {"text": ev.get("text", "")})
+                elif kind == "error":
+                    yield _sse("error", {"error": ev.get("error", "unknown error")})
+                    return
+                elif kind == "done":
+                    final_insights = ev.get("insights") or {}
+                    final_metrics = ev.get("metrics") or {}
+                    yield _sse("done", {
+                        "insights": final_insights,
+                        "metrics": final_metrics,
+                    })
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Streaming insights failed")
+            yield _sse("error", {"error": str(e)})
+            return
+
+        # Best-effort: log the same insights to history (mirrors the
+        # non-streaming endpoint). Done after streaming so the client
+        # already has its data even if logging fails.
+        if history and request.query_id and final_insights:
+            try:
+                await history.add_insight(
+                    query_id=request.query_id,
+                    insight_type="summary",
+                    content=final_insights.get("summary", "Analysis complete"),
+                    llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+                    llm_execution_time_ms=final_metrics.get("llm_latency_ms") or 0,
+                    tokens_input=final_metrics.get("input_tokens") or 0,
+                    tokens_output=final_metrics.get("output_tokens") or 0,
+                )
+                for finding in final_insights.get("findings", []) or []:
+                    await history.add_insight(
+                        query_id=request.query_id,
+                        insight_type="finding",
+                        content=finding,
+                        llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+                    )
+                for suggestion in final_insights.get("suggestions", []) or []:
+                    await history.add_insight(
+                        query_id=request.query_id,
+                        insight_type="suggestion",
+                        content=suggestion,
+                        llm_model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+                    )
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to log streamed insights to history")
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable nginx buffering if present
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.post("/generate-profile")

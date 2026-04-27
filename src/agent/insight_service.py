@@ -287,6 +287,147 @@ def _empty_insights(message: str, prompt: str = "", system_message: str = "") ->
     }
 
 
+async def generate_insights_stream(
+    dataset: Any,
+    context: Dict[str, Any],
+    original_question: str,
+    llm_service: Any = None,
+):
+    """Streaming variant of ``generate_insights``.
+
+    Yields a sequence of typed events that the HTTP layer relays as SSE:
+
+    - ``{"type": "open", "prompt": str, "system_message": str}`` (always first)
+    - ``{"type": "ttft", "ms": int}`` once the first non-empty content delta arrives
+    - ``{"type": "delta", "text": str}`` for each content chunk
+    - ``{"type": "done", "insights": dict, "metrics": {input_tokens, output_tokens, total_tokens, llm_latency_ms, ttft_ms}}``
+    - ``{"type": "error", "error": str}`` on any failure
+
+    The accumulated text is parsed by the same JSON parser the non-streaming
+    path uses, so the final ``insights`` payload matches the existing shape
+    consumed by ``InsightsManager`` on the client.
+    """
+    import time as _time
+
+    system_message = "You are a senior data analyst specialized in finding actionable insights."
+
+    # ----- early-out paths (mirror generate_insights) -----
+    try:
+        if isinstance(dataset, dict):
+            if "rows" in dataset and "columns" in dataset:
+                df = pd.DataFrame(dataset["rows"], columns=dataset["columns"])
+            else:
+                df = pd.DataFrame(dataset)
+        elif isinstance(dataset, pd.DataFrame):
+            df = dataset
+        else:
+            yield {
+                "type": "done",
+                "insights": _empty_insights(
+                    "Unsupported dataset format",
+                    "N/A - Unsupported dataset format",
+                    system_message,
+                ),
+                "metrics": {"input_tokens": None, "output_tokens": None, "total_tokens": None, "llm_latency_ms": 0, "ttft_ms": None},
+            }
+            return
+
+        if df.empty:
+            yield {
+                "type": "done",
+                "insights": _empty_insights(
+                    "No data returned from query",
+                    "N/A - No data returned from query",
+                    system_message,
+                ),
+                "metrics": {"input_tokens": None, "output_tokens": None, "total_tokens": None, "llm_latency_ms": 0, "ttft_ms": None},
+            }
+            return
+
+        if len(df) == 1:
+            yield {
+                "type": "done",
+                "insights": _empty_insights(
+                    "Single record returned, no patterns to analyze",
+                    "N/A - Single record, no patterns to analyze",
+                    system_message,
+                ),
+                "metrics": {"input_tokens": None, "output_tokens": None, "total_tokens": None, "llm_latency_ms": 0, "ttft_ms": None},
+            }
+            return
+
+        prompt = _build_insight_prompt(
+            dataset_summary=_prepare_dataset_summary(df),
+            context=context,
+            original_question=original_question,
+        )
+
+        if llm_service is None:
+            yield {
+                "type": "done",
+                "insights": _empty_insights("LLM service not available", prompt, system_message),
+                "metrics": {"input_tokens": None, "output_tokens": None, "total_tokens": None, "llm_latency_ms": 0, "ttft_ms": None},
+            }
+            return
+
+        yield {"type": "open", "prompt": prompt, "system_message": system_message}
+
+        # ----- LLM streaming -----
+        accumulated = []
+        usage: Dict[str, Any] = {}
+        ttft_ms = None
+        t0 = _time.perf_counter()
+
+        try:
+            async for ev in llm_service.generate_streaming(
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+            ):
+                if ev.get("type") == "delta":
+                    text = ev.get("text") or ""
+                    if text:
+                        if ttft_ms is None:
+                            ttft_ms = int((_time.perf_counter() - t0) * 1000)
+                            yield {"type": "ttft", "ms": ttft_ms}
+                        accumulated.append(text)
+                        yield {"type": "delta", "text": text}
+                elif ev.get("type") == "usage":
+                    usage = ev.get("usage") or {}
+                elif ev.get("type") == "error":
+                    yield {"type": "error", "error": ev.get("error") or "streaming failed"}
+                    return
+        except Exception as e:  # noqa: BLE001
+            yield {"type": "error", "error": str(e)}
+            return
+
+        llm_latency_ms = int((_time.perf_counter() - t0) * 1000)
+        full_text = "".join(accumulated)
+
+        insights = _parse_insights_response(full_text) if full_text else _empty_insights(
+            "No content returned", prompt, system_message
+        )
+        insights["prompt"] = prompt
+        insights["system_message"] = system_message
+
+        yield {
+            "type": "done",
+            "insights": insights,
+            "metrics": {
+                "input_tokens": usage.get("prompt_tokens"),
+                "output_tokens": usage.get("completion_tokens"),
+                "total_tokens": usage.get("total_tokens"),
+                "llm_latency_ms": llm_latency_ms,
+                "ttft_ms": ttft_ms,
+            },
+        }
+    except Exception as e:  # noqa: BLE001
+        yield {"type": "error", "error": str(e)}
+
+
 # Async version for use with asyncio
 async def generate_insights_async(
     dataset: Any,

@@ -12,7 +12,7 @@ import os
 from typing import Any, Dict
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
 logging.basicConfig(
     level=logging.INFO,
@@ -194,6 +194,50 @@ def generate_insights():
     if not data.get("connection"):
         return jsonify({"error": "No connection selected"}), 400
     return _proxy_post("/api/generate-insights", data)
+
+
+@app.route("/api/generate-insights/stream", methods=["POST"])
+def generate_insights_stream():
+    """Forward a Server-Sent Events stream from the API to the browser.
+
+    `requests` with stream=True keeps the connection open; we relay raw
+    bytes through a Flask streaming response so SSE framing is preserved.
+    """
+    data = request.get_json() or {}
+    if not data.get("connection"):
+        return jsonify({"error": "No connection selected"}), 400
+
+    upstream = requests.post(
+        f"{API_BASE_URL}/api/generate-insights/stream",
+        json=data,
+        stream=True,
+        timeout=120,
+    )
+
+    if upstream.status_code != 200:
+        # Surface the upstream error verbatim; don't try to re-stream.
+        body = upstream.text
+        upstream.close()
+        return jsonify({"error": body}), upstream.status_code
+
+    def relay():
+        try:
+            # Small chunk size so the first byte arrives ASAP.
+            for chunk in upstream.iter_content(chunk_size=64):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    return Response(
+        stream_with_context(relay()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/generate-profile", methods=["POST"])

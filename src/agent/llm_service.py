@@ -104,18 +104,13 @@ class AzureOpenAILlmService:
         **kwargs
     ) -> AsyncGenerator[str, None]:
         """
-        Stream response from Azure OpenAI.
-        
-        Args:
-            messages: List of message dicts
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-            
-        Yields:
-            Content chunks as they arrive
+        Stream response from Azure OpenAI (text-only).
+
+        Yields raw content chunks. For streaming + usage, use
+        ``generate_streaming`` which yields typed events.
         """
         loop = asyncio.get_event_loop()
-        
+
         # Create stream in executor
         stream = await loop.run_in_executor(
             None,
@@ -127,8 +122,75 @@ class AzureOpenAILlmService:
                 stream=True
             )
         )
-        
+
         # Yield chunks
         for chunk in stream:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    async def generate_streaming(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream typed events from Azure OpenAI.
+
+        Yields one of:
+        - ``{"type": "delta",   "text": str}``  for each non-empty content chunk
+        - ``{"type": "usage",   "usage": {prompt_tokens, completion_tokens, total_tokens}}``
+          (Azure returns usage as a final separate chunk when ``stream_options.include_usage`` is set)
+        - ``{"type": "error",   "error": str}`` if the upstream call fails
+
+        Implementation note: the underlying ``openai`` client is sync, so we
+        drive it on a worker thread and bridge events to the event loop via
+        an ``asyncio.Queue``. Yielding exits cleanly when the producer thread
+        signals end-of-stream.
+        """
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        _SENTINEL = object()
+
+        def _put(item: Any) -> None:
+            asyncio.run_coroutine_threadsafe(queue.put(item), loop)
+
+        def _producer() -> None:
+            try:
+                stream = self.client.chat.completions.create(
+                    model=self.deployment,
+                    messages=messages,
+                    temperature=temperature,
+                    max_completion_tokens=max_tokens,
+                    stream=True,
+                    stream_options={"include_usage": True},
+                )
+                for chunk in stream:
+                    # `usage` chunks have empty `choices` (Azure/OpenAI convention).
+                    usage = getattr(chunk, "usage", None)
+                    if usage is not None:
+                        _put({
+                            "type": "usage",
+                            "usage": {
+                                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                                "completion_tokens": getattr(usage, "completion_tokens", None),
+                                "total_tokens": getattr(usage, "total_tokens", None),
+                            },
+                        })
+                    choices = getattr(chunk, "choices", None) or []
+                    if choices:
+                        delta = getattr(choices[0], "delta", None)
+                        text = getattr(delta, "content", None) if delta else None
+                        if text:
+                            _put({"type": "delta", "text": text})
+            except Exception as e:  # noqa: BLE001
+                _put({"type": "error", "error": str(e)})
+            finally:
+                _put(_SENTINEL)
+
+        loop.run_in_executor(None, _producer)
+
+        while True:
+            item = await queue.get()
+            if item is _SENTINEL:
+                return
+            yield item

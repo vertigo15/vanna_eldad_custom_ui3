@@ -1746,3 +1746,25 @@ label {
     text-align: right;
   }
 }
+
+/* =============================================================
+   INSIGHTS STREAMING (TTFT badge + progress)
+   ============================================================= */
+.insights-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3);
+}
+.insights-stream-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-faint);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.insights-stream-status {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  margin-bottom: var(--space-2);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}

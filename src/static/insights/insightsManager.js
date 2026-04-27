@@ -12,80 +12,193 @@ class InsightsManager {
     }
 
     /**
-     * Generate and display insights for query results
+     * Generate and display insights for query results.
+     * Streams the LLM response via SSE for real TTFT + progressive UX.
+     * Falls back to the non-streaming endpoint on transport failure.
+     *
      * @param {Object} results - Query results with rows and columns
      * @param {string} question - Original user question
      * @param {string} queryId - Query ID for linking to history (optional)
      */
     async generateInsights(results, question, queryId = null) {
-        console.log('[InsightsManager] Generating insights');
-        
         const container = document.getElementById('insights-container');
         if (!container) {
             console.error('[InsightsManager] Insights container not found');
             return;
         }
 
-        // Show loading state
-        this.showLoading(container);
+        const connection = (typeof getActiveConnection === 'function') ? getActiveConnection() : '';
+        const requestBody = { connection, dataset: results, question };
+        if (queryId) requestBody.query_id = queryId;
+
+        this.showStreamingPlaceholder(container);
         this.state.isLoading = true;
 
         try {
-            // Call insights API
-            const connection = (typeof getActiveConnection === 'function') ? getActiveConnection() : '';
-            const requestBody = {
-                connection,
-                dataset: results,
-                question: question
-            };
-            
-            // Add query_id if provided (for history logging)
-            if (queryId) {
-                requestBody.query_id = queryId;
-                console.log('[InsightsManager] Including query_id for history:', queryId);
-            }
-            
-            const response = await fetch('/api/generate-insights', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-                signal: AbortSignal.timeout(30000)
-            });
-
-            if (!response.ok) {
-                throw new Error(`API returned ${response.status}: ${response.statusText}`);
-            }
-
-            const insights = await response.json();
-            
-            if (insights.error) {
-                throw new Error(insights.error);
-            }
-
-            console.log('[InsightsManager] Insights received:', insights);
-            
-            this.state.currentInsights = insights;
-            this.state.isLoading = false;
-
-            // Display insights
-            this.displayInsights(container, insights);
-            
-            // Display prompt in Insights Prompt tab if available
-            if (insights.prompt) {
-                this.displayInsightsPrompt(insights);
-            }
-
+            await this._streamInsights(container, requestBody);
         } catch (error) {
-            console.error('[InsightsManager] Failed to generate insights:', error);
+            // SSE failed (network, parse error, abort). Try the non-streaming
+            // endpoint once before giving up so a transient transport problem
+            // doesn't lose the user's insights.
+            console.warn('[InsightsManager] Stream failed, falling back to non-streaming:', error);
+            try {
+                await this._fetchInsightsFallback(container, requestBody);
+            } catch (fallbackErr) {
+                console.error('[InsightsManager] Fallback also failed:', fallbackErr);
+                this.showError(container, fallbackErr.message || String(fallbackErr));
+            }
+        } finally {
             this.state.isLoading = false;
-            this.showError(container, error.message);
         }
     }
 
     /**
-     * Display insights in the container
+     * Drive the SSE stream and update the placeholder progressively.
+     * Resolves on `done`, throws on `error` or transport failure.
      */
-    displayInsights(container, insights) {
+    async _streamInsights(container, requestBody) {
+        const response = await fetch('/api/generate-insights/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+            body: JSON.stringify(requestBody),
+        });
+        if (!response.ok || !response.body) {
+            throw new Error(`Stream returned ${response.status}: ${response.statusText}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let charsReceived = 0;
+        let ttftMs = null;
+        let finalInsights = null;
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // SSE frames are separated by a blank line.
+            let sep;
+            while ((sep = buffer.indexOf('\n\n')) !== -1) {
+                const frame = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const event = this._parseSseFrame(frame);
+                if (!event) continue;
+
+                if (event.name === 'ttft') {
+                    ttftMs = (event.data && event.data.ms) || null;
+                    this._setStreamingTtft(container, ttftMs);
+                } else if (event.name === 'delta') {
+                    const t = (event.data && event.data.text) || '';
+                    charsReceived += t.length;
+                    this._setStreamingProgress(container, charsReceived);
+                } else if (event.name === 'done') {
+                    finalInsights = event.data && event.data.insights;
+                    const metrics = event.data && event.data.metrics;
+                    if (finalInsights) {
+                        this.state.currentInsights = finalInsights;
+                        this.displayInsights(container, finalInsights, { ttftMs, metrics });
+                        if (finalInsights.prompt) this.displayInsightsPrompt(finalInsights);
+                    }
+                } else if (event.name === 'error') {
+                    const msg = (event.data && event.data.error) || 'streaming failed';
+                    throw new Error(msg);
+                }
+                // 'open' is informational; ignore.
+            }
+        }
+
+        if (!finalInsights) {
+            throw new Error('Stream ended without a done event');
+        }
+    }
+
+    /**
+     * Parse a single SSE frame into { name, data } where data is the parsed
+     * JSON payload. Returns null for comment-only frames (':' prefix).
+     */
+    _parseSseFrame(frame) {
+        const lines = frame.split('\n');
+        let name = 'message';
+        const dataLines = [];
+        for (const line of lines) {
+            if (!line || line.startsWith(':')) continue;
+            if (line.startsWith('event:')) {
+                name = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+                dataLines.push(line.slice(5).trimStart());
+            }
+        }
+        if (dataLines.length === 0) return null;
+        try {
+            return { name, data: JSON.parse(dataLines.join('\n')) };
+        } catch (_) {
+            return { name, data: null };
+        }
+    }
+
+    /**
+     * Last-resort path when the SSE endpoint is unreachable.
+     */
+    async _fetchInsightsFallback(container, requestBody) {
+        const response = await fetch('/api/generate-insights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+            signal: AbortSignal.timeout(30000),
+        });
+        if (!response.ok) {
+            throw new Error(`API returned ${response.status}: ${response.statusText}`);
+        }
+        const insights = await response.json();
+        if (insights.error) throw new Error(insights.error);
+        this.state.currentInsights = insights;
+        this.displayInsights(container, insights);
+        if (insights.prompt) this.displayInsightsPrompt(insights);
+    }
+
+    /**
+     * Initial placeholder shown while waiting for the first byte from the LLM.
+     */
+    showStreamingPlaceholder(container) {
+        container.innerHTML = `
+            <div class="insights-section">
+                <div class="insights-header">
+                    <h3>✨ Insights</h3>
+                    <span id="insights-stream-meta" class="insights-stream-meta"></span>
+                </div>
+                <div class="insights-loading" role="status" aria-label="Generating insights…">
+                    <div id="insights-stream-status" class="insights-stream-status">Thinking…</div>
+                    <div class="skeleton" style="height: 1rem; width: 80%;"></div>
+                    <div class="skeleton" style="height: 1rem; width: 60%;"></div>
+                    <div class="skeleton" style="height: 1rem; width: 72%;"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    _setStreamingTtft(container, ttftMs) {
+        const el = container.querySelector('#insights-stream-meta');
+        if (!el || ttftMs == null) return;
+        const txt = ttftMs >= 1000 ? (ttftMs / 1000).toFixed(1) + 's' : ttftMs + 'ms';
+        // textContent (not innerHTML) keeps this XSS-safe.
+        el.textContent = `TTFT ${txt}`;
+    }
+
+    _setStreamingProgress(container, charsReceived) {
+        const el = container.querySelector('#insights-stream-status');
+        if (!el) return;
+        el.textContent = `Generating… ${charsReceived.toLocaleString('en-US')} chars`;
+    }
+
+    /**
+     * Display insights in the container.
+     * @param {HTMLElement} container
+     * @param {Object} insights
+     * @param {{ttftMs?: number|null, metrics?: object|null}} [meta]
+     */
+    displayInsights(container, insights, meta = {}) {
         // Check if insights are empty
         if (!insights.findings || insights.findings.length === 0) {
             container.innerHTML = `
@@ -102,10 +215,17 @@ class InsightsManager {
         }
 
         // Build HTML for insights
+        let metaTxt = '';
+        const ttftMs = meta && meta.ttftMs;
+        if (ttftMs != null && Number.isFinite(ttftMs)) {
+            const t = ttftMs >= 1000 ? (ttftMs / 1000).toFixed(1) + 's' : ttftMs + 'ms';
+            metaTxt = `TTFT ${t}`;
+        }
         let html = `
             <div class="insights-section">
                 <div class="insights-header">
-                    <h3>💡 Insights</h3>
+                    <h3>✨ Insights</h3>
+                    <span class="insights-stream-meta">${this.escapeHtml(metaTxt)}</span>
                 </div>
                 
                 <div class="insights-content">
