@@ -1482,52 +1482,34 @@ label {
   color: var(--color-text);
   border-color: var(--color-border-2);
 }
-.chart-chat-transcript {
-  display: flex; flex-direction: column; gap: var(--space-2);
-  max-height: 240px; overflow-y: auto;
-  padding: var(--space-2);
+/* Inline single-line status under the chat header. The full transcript is
+   intentionally hidden — only the latest assistant note shows up here. */
+.chart-chat-status {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-2) transparent;
-}
-.chart-chat-transcript::-webkit-scrollbar { width: 8px; }
-.chart-chat-transcript::-webkit-scrollbar-track { background: transparent; }
-.chart-chat-transcript::-webkit-scrollbar-thumb {
-  background: var(--color-border-2);
-  border-radius: var(--radius-full);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.chart-chat-empty {
-  padding: var(--space-3) var(--space-2);
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--color-faint);
-  font-style: italic;
-}
-.chart-chat-bubble {
-  max-width: 90%;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  line-height: 1.5;
+  color: var(--color-muted);
   white-space: pre-wrap;
   word-wrap: break-word;
 }
-.chart-chat-bubble-user {
-  align-self: flex-end;
-  background: var(--color-accent);
-  color: var(--color-accent-fg);
-  border-bottom-right-radius: var(--radius-sm);
-}
-.chart-chat-bubble-assistant {
-  align-self: flex-start;
-  background: var(--color-surface-2);
+.chart-chat-status[data-kind="ok"] {
+  border-color: var(--color-border-2);
   color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-bottom-left-radius: var(--radius-sm);
+}
+.chart-chat-status[data-kind="warn"] {
+  border-color: var(--color-border-2);
+  color: var(--color-text);
+}
+.chart-chat-status[data-kind="error"] {
+  border-color: var(--color-error, #c0392b);
+  color: var(--color-error, #c0392b);
+}
+.chart-chat-status[data-kind="progress"] {
+  color: var(--color-faint);
+  font-style: italic;
 }
 .chart-chat-chips {
   display: flex; flex-wrap: wrap; gap: 6px;
@@ -1589,10 +1571,48 @@ label {
   opacity: 0.5; cursor: not-allowed;
 }
 @media (max-width: 600px) {
-  .chart-chat-bubble { max-width: 95%; }
   .chart-chat-input-row { flex-direction: column; align-items: stretch; }
   .chart-chat-send-btn { width: 100%; }
+  .chart-actions-toolbar { justify-content: stretch; }
+  .chart-actions-toolbar .chart-action-btn { flex: 1; justify-content: center; }
 }
+
+/* =============================================================
+   CHART ACTIONS TOOLBAR (Save PNG, Copy)
+   Sits above the chart canvas. Always visible while in chart view.
+   ============================================================= */
+.chart-actions-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 8px 0;
+}
+.chart-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.chart-action-btn:hover:not(:disabled) {
+  background: var(--color-surface-3);
+  color: var(--color-text);
+  border-color: var(--color-border-2);
+}
+.chart-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.chart-action-btn svg { display: block; }
 
 /* =============================================================
    SETTINGS MODAL

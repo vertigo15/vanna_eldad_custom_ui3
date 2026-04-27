@@ -91,6 +91,9 @@ export class ChartManager {
         // Chart container
         this.chartContainer = new ChartContainer('chart-display-container');
 
+        // Chart export toolbar (Save PNG / Copy).
+        this._mountChartActionsToolbar();
+
         // Chart chat panel (under the chart). Mounted once; enabled after
         // the first successful render. Lives only when the chart-chat
         // container exists in the DOM, so omitting it from the page is fine.
@@ -319,10 +322,12 @@ export class ChartManager {
             await this.chartContainer.init();
             this.chartContainer.render(chartConfig);
             if (this.chartChat) this.chartChat.enable();
+            this._enableChartActions(true);
             console.log('[ChartManager] Chart rendered successfully');
         } catch (error) {
             console.error('[ChartManager] Failed to render chart:', error);
             this.chartContainer.showError('Failed to render chart: ' + error.message);
+            this._enableChartActions(false);
         }
     }
 
@@ -404,6 +409,113 @@ export class ChartManager {
     }
     
     
+    // ─────────────────────────────────────────────────────────────────────
+    // Chart export toolbar (Save PNG / Copy)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Builds the chart-actions toolbar (Save PNG + Copy buttons) into
+     * #chart-actions-toolbar if present. Idempotent.
+     */
+    _mountChartActionsToolbar() {
+        const host = document.getElementById('chart-actions-toolbar');
+        if (!host || host.dataset.mounted === '1') return;
+
+        host.classList.add('chart-actions-toolbar');
+        host.innerHTML = '';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'chart-action-btn';
+        saveBtn.id = 'chart-save-png-btn';
+        saveBtn.title = 'Download chart as PNG';
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Save PNG</span>
+        `;
+        saveBtn.addEventListener('click', () => this._handleSavePng());
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'chart-action-btn';
+        copyBtn.id = 'chart-copy-png-btn';
+        copyBtn.title = 'Copy chart image to clipboard';
+        copyBtn.disabled = true;
+        copyBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy</span>
+        `;
+        copyBtn.addEventListener('click', () => this._handleCopyPng(copyBtn));
+
+        host.appendChild(saveBtn);
+        host.appendChild(copyBtn);
+        host.dataset.mounted = '1';
+        host.style.display = 'flex';
+
+        this._chartSavePngBtn = saveBtn;
+        this._chartCopyPngBtn = copyBtn;
+    }
+
+    _enableChartActions(enabled) {
+        if (this._chartSavePngBtn) this._chartSavePngBtn.disabled = !enabled;
+        if (this._chartCopyPngBtn) this._chartCopyPngBtn.disabled = !enabled;
+    }
+
+    _handleSavePng() {
+        if (!this.chartContainer || !this.chartContainer.hasChart()) {
+            this.showToast('No chart to export yet.', 'error');
+            return;
+        }
+        const dataUrl = this.chartContainer.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        if (!dataUrl) {
+            this.showToast('Could not generate chart image.', 'error');
+            return;
+        }
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = 'jeen_insights_chart_' + new Date().getTime() + '.png';
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        this.showToast('Chart saved as PNG.', 'success');
+    }
+
+    async _handleCopyPng(btn) {
+        if (!this.chartContainer || !this.chartContainer.hasChart()) {
+            this.showToast('No chart to copy yet.', 'error');
+            return;
+        }
+        // Clipboard image API requires a secure context (HTTPS or localhost).
+        const canCopyImage = !!(navigator.clipboard && window.ClipboardItem);
+        if (!canCopyImage) {
+            this.showToast('Clipboard image copy is not supported in this browser/context.', 'error');
+            return;
+        }
+        const originalLabel = btn ? btn.querySelector('span')?.textContent : null;
+        try {
+            if (btn) {
+                btn.disabled = true;
+                const span = btn.querySelector('span');
+                if (span) span.textContent = 'Copying…';
+            }
+            const blob = await this.chartContainer.getBlob({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+            if (!blob) throw new Error('No image data');
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            this.showToast('Chart copied to clipboard.', 'success');
+        } catch (e) {
+            console.error('[ChartManager] Copy chart failed:', e);
+            this.showToast('Could not copy chart: ' + (e && e.message ? e.message : 'unknown'), 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                const span = btn.querySelector('span');
+                if (span && originalLabel) span.textContent = originalLabel;
+            }
+        }
+    }
+
     /**
      * Loads ECharts library
      */

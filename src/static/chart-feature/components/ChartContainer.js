@@ -178,6 +178,52 @@ export class ChartContainer {
     }
     
     /**
+     * Returns the rendered chart as a data URL (PNG by default).
+     *
+     * @param {{type?: 'png'|'jpeg'|'svg', pixelRatio?: number, backgroundColor?: string}} [opts]
+     * @returns {string|null} data URL, or null if no chart is rendered
+     */
+    getDataURL(opts = {}) {
+        if (!this.chartInstance) return null;
+        const {
+            type = 'png',
+            pixelRatio = 2,
+            backgroundColor = '#ffffff',
+        } = opts;
+        try {
+            return this.chartInstance.getDataURL({ type, pixelRatio, backgroundColor });
+        } catch (e) {
+            console.error('[ChartContainer] getDataURL failed:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Returns the rendered chart as a Blob (PNG by default).
+     *
+     * @param {{type?: 'png'|'jpeg', pixelRatio?: number, backgroundColor?: string}} [opts]
+     * @returns {Promise<Blob|null>}
+     */
+    async getBlob(opts = {}) {
+        const dataUrl = this.getDataURL(opts);
+        if (!dataUrl) return null;
+        try {
+            const resp = await fetch(dataUrl);
+            return await resp.blob();
+        } catch (e) {
+            console.error('[ChartContainer] getBlob failed:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Returns true once a chart instance exists and has been rendered.
+     */
+    hasChart() {
+        return !!this.chartInstance;
+    }
+
+    /**
      * Cleans up resources
      */
     dispose() {

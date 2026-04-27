@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=30">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=31">
     <!-- CodeMirror 6 via ESM — exposes window.CodeMirrorService -->
     <script type="module">
       import { EditorView, lineNumbers } from 'https://esm.sh/@codemirror/view@6';
@@ -181,6 +181,8 @@
                         <!-- Chart View -->
                         <div id="chart-view-container" class="chart-view-container" style="display: none;">
                             <div id="chart-type-selector-container" class="chart-type-selector-container" style="display: none;"></div>
+                            <!-- Chart actions: Save PNG / Copy. Built dynamically by ChartManager. -->
+                            <div id="chart-actions-toolbar" class="chart-actions-toolbar" style="display: none;"></div>
                             <div id="chart-display-container" class="chart-display"></div>
                             <!-- Chart chat: visualization edits via natural language. Session-only. -->
                             <div id="chart-chat-container"></div>
@@ -245,8 +247,8 @@
     </div><!-- /layout-body -->
 </div><!-- /app-layout -->
 
-<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=30"></script>
-<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=30"></script>
-<script src="{{ url_for('static', filename='script.js') }}?v=30"></script>
+<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=31"></script>
+<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=31"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=31"></script>
 </body>
 </html>

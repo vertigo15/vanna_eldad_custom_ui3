@@ -1,16 +1,21 @@
 /**
  * Chart Chat component
  *
- * Renders a small chat panel under the chart that lets the user request
+ * Renders a small panel under the chart that lets the user request
  * visualization-only changes in natural language. Each message hits
  * /api/edit-chart, which returns a new ECharts config (and optionally a
  * list of derived-series specs computed locally from the existing data).
+ *
+ * UX note: the conversation transcript is intentionally NOT shown — only
+ * the most recent assistant note (or error) appears in a small inline
+ * status line. The internal `messages` array is still kept so we can
+ * pass `recent_messages` to the LLM for short-term context.
  *
  * Lifecycle:
  *   - mount()   — build DOM, attach listeners. Idempotent.
  *   - enable()  — turn on input after the first chart renders.
  *   - disable() — grey out (e.g. while the chart is loading).
- *   - reset()   — clear the transcript.
+ *   - reset()   — clear messages and the status line.
  *
  * State is in-memory only. Nothing is persisted.
  *
@@ -88,10 +93,13 @@ export class ChartChat {
         header.appendChild(titleBlock);
         header.appendChild(resetBtn);
 
-        const transcript = document.createElement('div');
-        transcript.className = 'chart-chat-transcript';
-        transcript.setAttribute('role', 'log');
-        transcript.setAttribute('aria-live', 'polite');
+        // Inline single-line status (latest assistant note / error). The
+        // full transcript is intentionally hidden per product decision.
+        const status = document.createElement('div');
+        status.className = 'chart-chat-status';
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        status.hidden = true;
 
         const chipRow = document.createElement('div');
         chipRow.className = 'chart-chat-chips';
@@ -139,17 +147,15 @@ export class ChartChat {
         inputRow.appendChild(sendBtn);
 
         container.appendChild(header);
-        container.appendChild(transcript);
+        container.appendChild(status);
         container.appendChild(chipRow);
         container.appendChild(inputRow);
 
-        this._transcriptEl = transcript;
+        this._statusEl = status;
         this._inputEl = input;
         this._sendBtnEl = sendBtn;
         this._chipRowEl = chipRow;
         this._resetBtnEl = resetBtn;
-
-        this._renderEmptyState();
     }
 
     enable() {
@@ -175,7 +181,7 @@ export class ChartChat {
             this.inFlight = null;
         }
         if (!this.mounted) return;
-        this._renderEmptyState();
+        this._clearStatus();
         this._inputEl.value = '';
     }
 
@@ -183,41 +189,40 @@ export class ChartChat {
     // Internals
     // ─────────────────────────────────────────────────────────────────────
 
-    _renderEmptyState() {
-        if (!this._transcriptEl) return;
-        this._transcriptEl.innerHTML = '';
-        const empty = document.createElement('div');
-        empty.className = 'chart-chat-empty';
-        empty.textContent = 'Type a change below or pick a suggestion.';
-        this._transcriptEl.appendChild(empty);
-    }
-
-    _renderTranscript() {
-        if (!this._transcriptEl) return;
-        this._transcriptEl.innerHTML = '';
-        if (this.messages.length === 0) {
-            this._renderEmptyState();
+    _setStatus(role, content, kind) {
+        if (!this._statusEl) return;
+        const text = (content || '').toString().trim();
+        if (!text) {
+            this._clearStatus();
             return;
         }
-        for (const msg of this.messages) {
-            const bubble = document.createElement('div');
-            bubble.className = `chart-chat-bubble chart-chat-bubble-${msg.role}`;
-            // textContent — never innerHTML — to avoid XSS from LLM output.
-            bubble.textContent = msg.content;
-            this._transcriptEl.appendChild(bubble);
-        }
-        // Pin to bottom.
-        this._transcriptEl.scrollTop = this._transcriptEl.scrollHeight;
+        // textContent — never innerHTML — to avoid XSS from LLM output.
+        this._statusEl.textContent = text;
+        this._statusEl.dataset.role = role || '';
+        this._statusEl.dataset.kind = kind || '';
+        this._statusEl.hidden = false;
     }
 
-    _appendMessage(role, content) {
+    _clearStatus() {
+        if (!this._statusEl) return;
+        this._statusEl.textContent = '';
+        this._statusEl.hidden = true;
+        delete this._statusEl.dataset.role;
+        delete this._statusEl.dataset.kind;
+    }
+
+    _appendMessage(role, content, kind) {
         const text = (content || '').toString().trim();
         if (!text) return;
         this.messages.push({ role, content: text });
         if (this.messages.length > MAX_TRANSCRIPT_MESSAGES) {
             this.messages.splice(0, this.messages.length - MAX_TRANSCRIPT_MESSAGES);
         }
-        this._renderTranscript();
+        // Only the latest assistant note is surfaced in the UI; the user's
+        // own input doesn't need to be echoed.
+        if (role === 'assistant') {
+            this._setStatus(role, text, kind);
+        }
     }
 
     _setBusy(busy) {
@@ -237,15 +242,17 @@ export class ChartChat {
         const connection = this.hooks.getConnection ? this.hooks.getConnection() : '';
 
         if (!config) {
-            this._appendMessage('assistant', 'Generate a chart first, then I can refine it.');
+            this._appendMessage('assistant', 'Generate a chart first, then I can refine it.', 'warn');
             return;
         }
         if (!connection) {
-            this._appendMessage('assistant', 'Pick a connection first.');
+            this._appendMessage('assistant', 'Pick a connection first.', 'warn');
             return;
         }
 
         this._appendMessage('user', instruction);
+        // Show progress where the assistant note will land.
+        this._setStatus('assistant', 'Working on it…', 'progress');
         this._inputEl.value = '';
         this._inputEl.style.height = 'auto';
         this._setBusy(true);
@@ -272,7 +279,7 @@ export class ChartChat {
 
             if (!resp.ok) {
                 const detail = (data && (data.detail || data.error)) || `HTTP ${resp.status}`;
-                this._appendMessage('assistant', `Couldn't apply that change: ${detail}`);
+                this._appendMessage('assistant', `Couldn't apply that change: ${detail}`, 'error');
                 return;
             }
 
@@ -285,7 +292,7 @@ export class ChartChat {
 
             if (outOfScope || !newConfig) {
                 const fallback = note || 'That request needs a new query — please ask it in the main question box.';
-                this._appendMessage('assistant', fallback);
+                this._appendMessage('assistant', fallback, 'warn');
                 return;
             }
 
@@ -295,7 +302,7 @@ export class ChartChat {
                     this.hooks.onApply(newConfig, derived, note || null);
                 } catch (e) {
                     console.error('[ChartChat] onApply threw', e);
-                    this._appendMessage('assistant', 'Got a config back but failed to render it. The chart was not changed.');
+                    this._appendMessage('assistant', 'Got a config back but failed to render it. The chart was not changed.', 'error');
                     return;
                 }
             }
@@ -311,12 +318,13 @@ export class ChartChat {
             }
             this._appendMessage(
                 'assistant',
-                summaryParts.length ? summaryParts.join(' ') : 'Updated the chart.'
+                summaryParts.length ? summaryParts.join(' ') : 'Updated the chart.',
+                'ok'
             );
         } catch (e) {
             if (e && e.name === 'AbortError') return; // silent — superseded or reset
             console.error('[ChartChat] send failed', e);
-            this._appendMessage('assistant', `Network error: ${e && e.message ? e.message : 'unknown'}.`);
+            this._appendMessage('assistant', `Network error: ${e && e.message ? e.message : 'unknown'}.`, 'error');
         } finally {
             if (myRequestId === this.idCounter) {
                 this._setBusy(false);
