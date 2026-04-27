@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jeen-insights"
+version = "2.0.0"
+description = "Natural-language analytics over registered data connections."
+requires-python = ">=3.11"
+
+# ----------------------------------------------------------------------
+# pytest
+# ----------------------------------------------------------------------
+[tool.pytest.ini_options]
+# Default run: only fast unit tests. Integration tests live under
+# tests/integration and are opt-in via `pytest tests/integration` or
+# `pytest -m integration`.
+testpaths = ["tests/unit"]
+addopts = "-q --strict-markers --tb=short"
+pythonpath = ["."]
+markers = [
+    "integration: end-to-end test that requires live services (DB, browser, LLM)",
+]
+filterwarnings = [
+    # asyncpg + pydantic-v2 are noisy on import; drop the deprecation noise
+    # so test output stays focused on assertions.
+    "ignore::DeprecationWarning",
+]
