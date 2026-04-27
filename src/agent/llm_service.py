@@ -1,4 +1,4 @@
-"""Azure OpenAI LLM service for Vanna 2.0."""
+"""Azure OpenAI LLM service for Jeen Insights."""
 
 from openai import AzureOpenAI
 from typing import Dict, Any, List, Optional, AsyncGenerator
@@ -8,7 +8,7 @@ import json
 
 class AzureOpenAILlmService:
     """
-    Azure OpenAI LLM service for Vanna 2.0.
+    Azure OpenAI LLM service for Jeen Insights.
     Provides text generation capabilities using Azure OpenAI.
     """
     

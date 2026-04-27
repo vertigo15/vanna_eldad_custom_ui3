@@ -1,1 +1,1 @@
-# Vanna 2.0 Text-to-SQL Application
+# Jeen Insights — Text-to-SQL Application

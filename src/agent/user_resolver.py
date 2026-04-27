@@ -1,4 +1,4 @@
-"""Simple user resolver for Vanna 2.0."""
+"""Simple user resolver for Jeen Insights."""
 
 from dataclasses import dataclass
 from typing import Optional

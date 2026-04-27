@@ -53,7 +53,10 @@ def is_read_only_sql(sql: str) -> bool:
 class PostgresSqlRunner:
     """
     PostgreSQL SQL runner for executing queries.
-    Connects to the AdventureWorksDW data source.
+
+    One instance is built per active connection (see ConnectionService),
+    so the database it talks to depends on which connection the caller
+    selected — it is not pinned to any specific data source.
     """
     
     def __init__(self, connection_string: str):
@@ -188,14 +191,32 @@ class PostgresSqlRunner:
 
 class RunSqlTool:
     """
-    Vanna 2.0 tool wrapper for SQL execution.
-    This wraps the PostgresSqlRunner for use with Vanna's agent.
+    Tool wrapper for SQL execution, for the LLM's function-calling interface.
+
+    Wraps a `PostgresSqlRunner` bound to a specific active connection. The
+    tool description sent to the LLM is built from the connection's display
+    name + database type so the model knows which database it is querying.
     """
-    
-    def __init__(self, sql_runner: PostgresSqlRunner):
+
+    def __init__(
+        self,
+        sql_runner: PostgresSqlRunner,
+        connection_display_name: Optional[str] = None,
+        database_type: Optional[str] = None,
+    ):
         self.sql_runner = sql_runner
         self.name = "run_sql"
-        self.description = "Execute a SQL query against the AdventureWorksDW database"
+        # Build a connection-aware description; fall back to a neutral one.
+        if connection_display_name:
+            db_type = (database_type or "sql").strip() or "sql"
+            self.description = (
+                f"Execute a read-only SQL query against the "
+                f"{connection_display_name} ({db_type}) database."
+            )
+        else:
+            self.description = (
+                "Execute a read-only SQL query against the active database."
+            )
     
     def get_schema(self) -> Dict[str, Any]:
         """Return tool schema for LLM function calling."""

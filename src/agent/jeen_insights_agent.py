@@ -65,7 +65,11 @@ class JeenInsightsAgent:
         self.metadata_loader = metadata_loader
         self.history = history_service
         self.user_resolver = user_resolver
-        self.sql_tool = RunSqlTool(sql_runner)
+        self.sql_tool = RunSqlTool(
+            sql_runner,
+            connection_display_name=connection.display_name,
+            database_type=connection.database_type,
+        )
         self._prompt_template = prompt_template
 
     async def process_question(

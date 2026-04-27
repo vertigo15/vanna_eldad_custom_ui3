@@ -820,7 +820,7 @@ function exportToExcel() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'vanna_results_' + new Date().getTime() + '.csv');
+    link.setAttribute('download', 'jeen_insights_results_' + new Date().getTime() + '.csv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
