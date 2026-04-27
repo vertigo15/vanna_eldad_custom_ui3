@@ -1720,3 +1720,29 @@ label {
   .settings-row { grid-template-columns: 1fr; }
   .settings-row-control { justify-self: stretch; }
 }
+
+/* =============================================================
+   ASK-CARD METRICS READOUT (token usage + LLM latency)
+   ============================================================= */
+.ask-metrics {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-faint);
+  letter-spacing: 0;
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.ask-metrics[hidden] { display: none; }
+/* Make the query card the positioning context so 'absolute' lands inside it. */
+.query-card { position: relative; padding-bottom: var(--space-6); }
+@media (max-width: 600px) {
+  .ask-metrics {
+    position: static;
+    margin-top: var(--space-2);
+    text-align: right;
+  }
+}

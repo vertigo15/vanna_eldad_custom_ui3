@@ -35,6 +35,11 @@ class QueryResponse(BaseModel):
     results: Optional[Dict[str, Any]]
     prompt: Optional[Dict[str, Any]] = None
     error: Optional[str]
+    # Per-request metrics surfaced to the UI:
+    #   - input_tokens / output_tokens / total_tokens: from Azure OpenAI usage
+    #   - llm_latency_ms: total time spent inside llm.generate (not TTFT;
+    #     real TTFT requires streaming, which we don't do today)
+    metrics: Optional[Dict[str, Any]] = None
 
 
 class ColumnInfo(BaseModel):

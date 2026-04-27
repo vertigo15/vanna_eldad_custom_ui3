@@ -69,7 +69,17 @@ class AzureOpenAILlmService:
             "content": choice.message.content or "",
             "finish_reason": choice.finish_reason,
         }
-        
+
+        # Token usage (input + output). Azure occasionally omits this on
+        # streaming or older API versions; surface what we got, default to None.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            result["usage"] = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None),
+            }
+
         # Handle tool calls if present
         if choice.message.tool_calls:
             result["tool_calls"] = [

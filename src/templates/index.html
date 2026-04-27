@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=28">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=29">
     <!-- CodeMirror 6 via ESM — exposes window.CodeMirrorService -->
     <script type="module">
       import { EditorView, lineNumbers } from 'https://esm.sh/@codemirror/view@6';
@@ -135,6 +135,7 @@
                         <div id="question-suggestions" class="question-suggestions" role="listbox" hidden></div>
                     </div>
                     <p id="suggestions-tip" class="suggestions-tip">Tip: type <code>@</code> for tables · <code>#</code> for columns · <code>/</code> for templates</p>
+                    <div id="ask-metrics" class="ask-metrics" hidden aria-live="polite"></div>
 
                     <!-- Skeleton loading state -->
                     <div id="loading" class="loading" style="display: none;" role="status" aria-label="Loading results…">
@@ -244,8 +245,8 @@
     </div><!-- /layout-body -->
 </div><!-- /app-layout -->
 
-<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=28"></script>
-<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=28"></script>
-<script src="{{ url_for('static', filename='script.js') }}?v=28"></script>
+<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=29"></script>
+<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=29"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=29"></script>
 </body>
 </html>

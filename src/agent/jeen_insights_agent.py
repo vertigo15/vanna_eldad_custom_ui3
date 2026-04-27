@@ -174,6 +174,7 @@ class JeenInsightsAgent:
             )
             llm_latency_ms = int((time.time() - llm_start) * 1000)
 
+            usage = response.get("usage") or {}
             result: Dict[str, Any] = {
                 "question": question,
                 "query_id": query_id,
@@ -182,6 +183,12 @@ class JeenInsightsAgent:
                 "results": None,
                 "prompt": structured_prompt,
                 "error": None,
+                "metrics": {
+                    "input_tokens": usage.get("prompt_tokens"),
+                    "output_tokens": usage.get("completion_tokens"),
+                    "total_tokens": usage.get("total_tokens"),
+                    "llm_latency_ms": llm_latency_ms,
+                },
             }
 
             sql = self._extract_sql(response)
@@ -249,6 +256,7 @@ class JeenInsightsAgent:
                 "results": None,
                 "prompt": None,
                 "error": str(e),
+                "metrics": None,
             }
 
     # ------------------------------------------------------------------

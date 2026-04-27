@@ -155,6 +155,7 @@ async function askQuestion() {
     // Show loading state
     hideError();
     hideResults();
+    hideAskMetrics();
     showLoading();
     
     const connection = requireConnection();
@@ -225,6 +226,9 @@ function displayResults(data) {
     // Show results section
     const resultsSection = document.getElementById('results-section');
     resultsSection.style.display = 'flex';
+
+    // Render token-usage + LLM-latency under the Ask card.
+    showAskMetrics(data.metrics);
 
     // Derive a human-readable result title from the question + bind page title
     const derivedTitle = deriveResultTitle(data.question);
@@ -886,6 +890,46 @@ function hideError() {
 
 function hideResults() {
     document.getElementById('results-section').style.display = 'none';
+}
+
+// ----------------------------------------------------------------
+// Ask-card metrics readout (token usage + LLM latency)
+// ----------------------------------------------------------------
+//
+// We deliberately call this `LLM` (latency) and not `TTFT`. Real TTFT
+// requires streaming, which the agent doesn't do today — the value here
+// is the total time spent inside `llm.generate`. Honest label, accurate
+// number.
+function _formatTokens(n) {
+    if (n === null || n === undefined) return '—';
+    if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+    if (n >= 100000) return (n / 1000).toFixed(0) + 'K';
+    if (n >= 10000)  return (n / 1000).toFixed(1) + 'K';
+    return n.toLocaleString('en-US');
+}
+function _formatLatency(ms) {
+    if (ms === null || ms === undefined || !Number.isFinite(ms)) return '—';
+    if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
+    return Math.max(1, Math.round(ms)) + 'ms';
+}
+function showAskMetrics(metrics) {
+    const el = document.getElementById('ask-metrics');
+    if (!el) return;
+    if (!metrics || typeof metrics !== 'object') {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+    }
+    const inTok  = _formatTokens(metrics.input_tokens);
+    const outTok = _formatTokens(metrics.output_tokens);
+    const lat    = _formatLatency(metrics.llm_latency_ms);
+    // textContent (not innerHTML) keeps this XSS-safe.
+    el.textContent = `in: ${inTok} tok \u00b7 out: ${outTok} tok \u00b7 LLM ${lat}`;
+    el.hidden = false;
+}
+function hideAskMetrics() {
+    const el = document.getElementById('ask-metrics');
+    if (el) { el.hidden = true; el.textContent = ''; }
 }
 
 // Utility: Escape HTML
