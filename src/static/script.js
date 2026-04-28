@@ -40,6 +40,9 @@ const _columnsLoading = new Set(); // keys currently in flight
 
 const TABLE_ICON_SVG = '<svg class="table-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/></svg>';
 
+// Set of table names that are currently expanded in the sidebar
+const _tableExpandedSet = new Set();
+
 function getActiveConnection() {
     return localStorage.getItem(CONNECTION_STORAGE_KEY) || '';
 }
@@ -119,8 +122,9 @@ function onConnectionChange(sourceKey) {
     const activeRow = availableConnections.find(c => c.source_key === newConnection);
     setConnectionPillName(activeRow ? activeRow.display_name : newConnection);
     setConnectionStatus('connecting');
-    // Reset autocomplete caches (they're connection-specific).
-    if (typeof SuggestionController !== 'undefined') SuggestionController.reset();
+        // Reset autocomplete caches and table expand state (connection-specific).
+        _tableExpandedSet.clear();
+        if (typeof SuggestionController !== 'undefined') SuggestionController.reset();
     // Auto-load tables for the new connection.
     loadTables();
     if (typeof displayHistory === 'function') displayHistory();
@@ -768,8 +772,13 @@ async function loadTables() {
             allTables = data.tables;
             searchInput.style.display = 'block';
             displayFilteredTables(allTables);
+            // Update count badge in sidebar header
+            const countBadge = document.getElementById('table-count-badge');
+            if (countBadge) countBadge.textContent = allTables.length;
         } else {
             tablesList.innerHTML = '<p style="color: var(--color-faint); font-size: var(--text-xs); padding: 4px 0;">No tables found</p>';
+            const countBadge = document.getElementById('table-count-badge');
+            if (countBadge) countBadge.textContent = '';
         }
         setConnectionStatus('ok');
     } catch (error) {
@@ -786,31 +795,180 @@ function filterTables() {
     displayFilteredTables(filtered);
 }
 
-// Display filtered tables (with icons + active highlight).
+// Display filtered tables — accordion layout with column expand, action buttons, count badge.
 function displayFilteredTables(tables) {
     const tablesList = document.getElementById('tables-list');
-    if (tables.length > 0) {
-        tablesList.innerHTML = tables.map(table => {
-            const safe = escapeHtml(table);
-            const safeAttr = table.replace(/'/g, "\\'");
-            const isActive = activeTable === table ? ' active' : '';
-            return `<div class="table-item${isActive}" data-table="${safe}" onclick="selectTable('${safeAttr}')">${TABLE_ICON_SVG}<span class="table-name">${safe}</span></div>`;
-        }).join('');
-    } else {
+    if (tables.length === 0) {
         tablesList.innerHTML = '<p style="color: var(--color-muted); font-size: var(--text-xs); padding: 4px 0;">No matching tables</p>';
+        return;
+    }
+    const conn = getActiveConnection();
+    tablesList.innerHTML = tables.map(table => {
+        const safe = escapeHtml(table);
+        const safeJS = table.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isActive = activeTable === table ? ' is-active' : '';
+        const isExpanded = _tableExpandedSet.has(table);
+        // Column count from cache (may be unknown yet)
+        const cacheKey = conn + '|' + table;
+        const cached = _columnsCache.get(cacheKey);
+        const colCountBadge = cached
+            ? `<span class="table-col-count">${cached.length}</span>`
+            : '';
+        const arrowClass = 'table-expand-arrow' + (isExpanded ? ' open' : '');
+        const colsHtml = isExpanded && cached
+            ? renderTableColumns(cached)
+            : (isExpanded ? '<div class="table-cols-loading">Loading…</div>' : '');
+
+        return `<div class="table-item${isActive}" data-table="${safe}">
+  <div class="table-item-header" onclick="toggleTableExpand('${safeJS}')">
+    ${TABLE_ICON_SVG}
+    <span class="table-name" title="${safe}">${safe}</span>
+    ${colCountBadge}
+    <div class="table-item-actions">
+      <button class="table-action-btn" onclick="event.stopPropagation();selectTableExplore('${safeJS}')" title="Explore data">→</button>
+      <button class="table-action-btn" onclick="event.stopPropagation();selectTableSchema('${safeJS}')" title="Show schema">≡</button>
+      <button class="table-action-btn" onclick="event.stopPropagation();copyTableName('${safeJS}')" title="Copy name">⧉</button>
+    </div>
+    <span class="${arrowClass}">&#9656;</span>
+  </div>
+  <div class="table-columns-list${isExpanded ? ' open' : ''}" id="tbl-cols-${safe}">${colsHtml}</div>
+</div>`;
+    }).join('');
+}
+
+// Render the column rows inside an expanded table.
+function renderTableColumns(cols) {
+    if (!cols || cols.length === 0) {
+        return '<div class="table-cols-loading">No columns found</div>';
+    }
+    return cols.map(c => {
+        const typeLower = (c.data_type || '').toLowerCase();
+        let typeClass;
+        if (/int|float|decimal|numeric|double|real|number|bigint|smallint/.test(typeLower)) typeClass = 'numeric';
+        else if (/char|text|string|varchar|nvarchar|clob/.test(typeLower)) typeClass = 'text';
+        else if (/date|time|timestamp/.test(typeLower)) typeClass = 'date';
+        else if (/bool/.test(typeLower)) typeClass = 'bool';
+        else typeClass = 'other';
+        // Strip length specifiers: varchar(255) → varchar
+        const typeShort = (c.data_type || '?').replace(/\(.*\)/, '').toLowerCase();
+        const desc = c.description ? ` title="${escapeHtml(c.description)}"` : '';
+        const safeCol = escapeHtml(c.column || '');
+        const safeTable = (c.table || '').replace(/'/g, "\\'");
+        return `<div class="table-col-row"${desc} onclick="fillQuestion('Show ${safeCol} from ${escapeHtml(c.table || '')}')">
+  <span class="table-col-name">${safeCol}</span>
+  <span class="table-col-type-badge table-col-type-${typeClass}">${escapeHtml(typeShort)}</span>
+</div>`;
+    }).join('');
+}
+
+// Toggle expand/collapse a table row. Fetches columns on first open.
+function toggleTableExpand(table) {
+    const conn = getActiveConnection();
+    const isExpanded = _tableExpandedSet.has(table);
+
+    // Find the item DOM node by dataset
+    const allItems = document.querySelectorAll('.table-item');
+    let el = null;
+    for (const item of allItems) {
+        if (item.dataset.table === table) { el = item; break; }
+    }
+
+    if (isExpanded) {
+        _tableExpandedSet.delete(table);
+        if (el) {
+            el.querySelector('.table-columns-list').classList.remove('open');
+            const arrow = el.querySelector('.table-expand-arrow');
+            if (arrow) arrow.classList.remove('open');
+        }
+        return;
+    }
+
+    _tableExpandedSet.add(table);
+    if (!el) return;
+
+    const colList = el.querySelector('.table-columns-list');
+    const arrow = el.querySelector('.table-expand-arrow');
+    if (arrow) arrow.classList.add('open');
+
+    const cacheKey = conn + '|' + table;
+    const cached = _columnsCache.get(cacheKey);
+    if (cached) {
+        colList.innerHTML = renderTableColumns(cached);
+        colList.classList.add('open');
+        // Update col count badge if not yet shown
+        const badge = el.querySelector('.table-col-count');
+        if (!badge) {
+            const nameEl = el.querySelector('.table-name');
+            if (nameEl) {
+                const newBadge = document.createElement('span');
+                newBadge.className = 'table-col-count';
+                newBadge.textContent = cached.length;
+                nameEl.after(newBadge);
+            }
+        }
+    } else {
+        colList.innerHTML = '<div class="table-cols-loading">Loading…</div>';
+        colList.classList.add('open');
+        fetchKnowledgeColumns(table).then(cols => {
+            if (!cols) {
+                colList.innerHTML = '<div class="table-cols-loading">Could not load columns</div>';
+                return;
+            }
+            // Only update if still expanded
+            if (!_tableExpandedSet.has(table)) return;
+            colList.innerHTML = renderTableColumns(cols);
+            // Add/update col count badge
+            const freshItems = document.querySelectorAll('.table-item');
+            for (const item of freshItems) {
+                if (item.dataset.table !== table) continue;
+                const badge = item.querySelector('.table-col-count');
+                if (badge) {
+                    badge.textContent = cols.length;
+                } else {
+                    const nameEl = item.querySelector('.table-name');
+                    if (nameEl) {
+                        const newBadge = document.createElement('span');
+                        newBadge.className = 'table-col-count';
+                        newBadge.textContent = cols.length;
+                        nameEl.after(newBadge);
+                    }
+                }
+                break;
+            }
+        });
     }
 }
 
+// Set a table as active (highlights it) without auto-filling a question.
 function selectTable(table) {
     activeTable = table;
-    // Re-render with the active row highlighted.
     const searchInput = document.getElementById('table-search');
     const term = (searchInput && searchInput.value || '').toLowerCase();
     const filtered = term
         ? allTables.filter(t => t.toLowerCase().includes(term))
         : allTables;
     displayFilteredTables(filtered);
+}
+
+// Fill question: "Show me data from {table}"
+function selectTableExplore(table) {
+    activeTable = table;
     fillQuestion('Show me data from ' + table);
+    selectTable(table);
+}
+
+// Fill question: "Describe the columns in {table}"
+function selectTableSchema(table) {
+    fillQuestion('Describe the columns in ' + table);
+}
+
+// Copy table name to clipboard and show toast.
+function copyTableName(table) {
+    navigator.clipboard.writeText(table).then(() => {
+        showToast(table + ' copied', 'info');
+    }).catch(() => {
+        showToast('Could not copy', 'error');
+    });
 }
 
 // Export to Excel
@@ -2932,6 +3090,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.onConnectionChange = onConnectionChange;
     window.loadConnections = loadConnections;
     window.selectTable = selectTable;
+    window.selectTableExplore = selectTableExplore;
+    window.selectTableSchema = selectTableSchema;
+    window.copyTableName = copyTableName;
+    window.toggleTableExpand = toggleTableExpand;
     window.setPageTitle = setPageTitle;
 
     console.log('[Module] Functions exposed to window:', Object.keys(window).filter(k => ['askQuestion', 'sortTable', 'filterResults'].includes(k)));
