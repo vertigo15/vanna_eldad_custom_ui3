@@ -185,6 +185,21 @@ def unpin_question():
     return _proxy_post("/api/user/unpin-question", data)
 
 
+@app.route("/api/user/history-log", methods=["GET"])
+def get_history_log():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"entries": []})
+    return _proxy_get(
+        "/api/user/history-log",
+        params={
+            "connection": connection,
+            "user_id": request.args.get("user_id", "default"),
+            "limit": request.args.get("limit", "100"),
+        },
+    )
+
+
 # ----------------------------------------------------------------------
 # Insights / charts / profile
 # ----------------------------------------------------------------------

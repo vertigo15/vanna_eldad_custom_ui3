@@ -362,6 +362,59 @@ class ConversationHistoryService:
             logger.exception("Failed to get user pinned questions")
             return []
 
+    async def get_history_log(
+        self,
+        *,
+        user_id: str,
+        source_key: str,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Return all queries for a user+connection, newest first.
+
+        Each entry includes the question text, execution status, token usage,
+        LLM and execution latency, row count, and ISO timestamp so the UI can
+        render a full audit / activity log.
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        natural_language_query,
+                        generated_sql,
+                        execution_status,
+                        llm_latency_ms,
+                        tokens_used,
+                        execution_time_ms,
+                        row_count,
+                        error_message,
+                        created_at
+                    FROM insights_conversation_sessions
+                    WHERE user_id = $1 AND source_key = $2
+                    ORDER BY created_at DESC
+                    LIMIT $3
+                    """,
+                    user_id,
+                    source_key,
+                    limit,
+                )
+            return [
+                {
+                    "question":   r["natural_language_query"],
+                    "status":     r["execution_status"],
+                    "tokens":     r["tokens_used"],
+                    "llm_ms":     r["llm_latency_ms"],
+                    "exec_ms":    r["execution_time_ms"],
+                    "row_count":  r["row_count"],
+                    "error":      r["error_message"],
+                    "asked_at":   r["created_at"].isoformat() if r["created_at"] else None,
+                }
+                for r in rows
+            ]
+        except Exception:
+            logger.exception("Failed to get history log")
+            return []
+
     async def pin_question(
         self,
         *,

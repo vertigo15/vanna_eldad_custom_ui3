@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=36">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=37">
     <!-- CodeMirror 6 via ESM — exposes window.CodeMirrorService -->
     <script type="module">
       import { EditorView, lineNumbers } from 'https://esm.sh/@codemirror/view@6';
@@ -109,6 +109,15 @@
                 <div class="info-card-header">
                     <h3>Recent Questions</h3>
                 </div>
+                <input
+                    type="text"
+                    id="question-search"
+                    class="table-search-input question-search-input"
+                    placeholder="Search questions…"
+                    oninput="filterQuestionHistory()"
+                    aria-label="Search recent questions"
+                    style="display: none;"
+                />
                 <div id="question-history" class="question-history" role="list"></div>
                 <button onclick="clearHistory()" class="clear-history-btn" style="display: none;" id="clear-history-btn" aria-label="Clear question history">Clear</button>
             </div>
@@ -215,6 +224,29 @@
     </div><!-- /layout-body -->
 </div><!-- /app-layout -->
 
+<!-- ── History Drawer ───────────────────────────────────────────── -->
+<div id="history-drawer-overlay" class="history-drawer-overlay" aria-hidden="true"></div>
+<aside id="history-drawer" class="history-drawer" aria-label="Query history" aria-hidden="true">
+    <div class="history-drawer-header">
+        <div class="history-drawer-header-top">
+            <h2 class="history-drawer-title">History</h2>
+            <button class="dev-drawer-close-btn" id="history-drawer-close" aria-label="Close history">×</button>
+        </div>
+        <input
+            type="text"
+            id="history-log-search"
+            class="table-search-input"
+            placeholder="Search history…"
+            oninput="filterHistoryLog()"
+            aria-label="Search history"
+            style="margin-bottom: 0; margin-top: 8px;"
+        />
+    </div>
+    <div class="history-drawer-body" id="history-drawer-body">
+        <p class="history-empty">Loading…</p>
+    </div>
+</aside>
+
 <!-- ── Dev Drawer (Prompts & SQL) ───────────────────────────────── -->
 <div id="dev-drawer-overlay" class="dev-drawer-overlay" aria-hidden="true"></div>
 <aside id="dev-drawer" class="dev-drawer" aria-label="Developer panel" aria-hidden="true">
@@ -256,8 +288,8 @@
     </div>
 </aside>
 
-<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=36"></script>
-<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=36"></script>
-<script src="{{ url_for('static', filename='script.js') }}?v=36"></script>
+<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=37"></script>
+<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=37"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=37"></script>
 </body>
 </html>
