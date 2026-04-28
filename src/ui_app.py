@@ -121,6 +121,14 @@ def get_tables():
     return _proxy_get("/api/tables", params={"connection": connection}, timeout=15)
 
 
+@app.route("/api/tables-rich", methods=["GET"])
+def get_tables_rich():
+    connection = request.args.get("connection")
+    if not connection:
+        return jsonify({"error": "No connection selected"}), 400
+    return _proxy_get("/api/tables-rich", params={"connection": connection}, timeout=15)
+
+
 @app.route("/api/schema/<table_name>", methods=["GET"])
 def get_schema(table_name: str):
     connection = request.args.get("connection")
