@@ -52,6 +52,10 @@ let _colFormats  = {};  // colIndex → { type, icon, label }
 let _derivedCols = [];  // [{ sourceIndex, type, name }]
 let _colSums     = {};  // colIndex → numeric sum (for % of total)
 
+// Rows currently visible in the results table (respects sort + filter).
+// Updated by renderTable(); used by the row context menu.
+let _currentVisibleRows = [];
+
 function getActiveConnection() {
     return localStorage.getItem(CONNECTION_STORAGE_KEY) || '';
 }
@@ -397,9 +401,13 @@ function renderTable(results, rows) {
     });
     html += '</tr></thead><tbody>';
 
+    // Snapshot so the row context menu can look up any row by index.
+    _currentVisibleRows = rows;
+
     const runTotals = {};
     rows.forEach((row, rowIdx) => {
-        html += '<tr class="data-row">';
+        html += `<tr class="data-row" oncontextmenu="showRowMenu(event,${rowIdx});return false;">`;
+        html += `<td style="display:none" data-row-idx="${rowIdx}"></td>`;
         results.columns.forEach((column, idx) => {
             const cell = Array.isArray(row) ? row[idx] : row[column];
             html += renderCellHtml(cell, idx, profile);
@@ -2242,6 +2250,170 @@ function reRenderTable() {
     if (rc) rc.textContent = rows.length + ' row' + (rows.length !== 1 ? 's' : '');
 }
 
+// ======================================================
+// ROW CONTEXT MENU
+// ======================================================
+
+// Build a short human-readable label for a row (used in question templates).
+// Uses the first 1–3 non-null columns: "month = Jan, revenue = 100"
+function _rowLabel(rowIdx) {
+    if (!currentResults || rowIdx >= _currentVisibleRows.length) return 'this row';
+    const row  = _currentVisibleRows[rowIdx];
+    const cols = currentResults.columns;
+    const parts = [];
+    for (let i = 0; i < Math.min(3, cols.length) && parts.length < 3; i++) {
+        const v = Array.isArray(row) ? row[i] : row[cols[i]];
+        if (v !== null && v !== undefined && v !== '') {
+            parts.push(cols[i] + ' = ' + String(v));
+        }
+    }
+    return parts.length ? parts.join(', ') : 'this row';
+}
+
+// Show the row context menu at the cursor position.
+function showRowMenu(event, rowIdx) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!currentResults || rowIdx >= _currentVisibleRows.length) return;
+
+    // Close any open column menu first.
+    closeColMenu();
+
+    // Value of the specific cell that was right-clicked.
+    const clickedTd    = event.target.closest('td');
+    const cellText     = clickedTd ? clickedTd.textContent.trim() : null;
+    const hasCellValue = cellText && cellText !== 'NULL' && cellText.length > 0;
+
+    // Determine the column index of the clicked cell (skip the hidden helper td).
+    let clickedColIdx = -1;
+    if (clickedTd) {
+        // The first child <td> is the hidden data-row-idx helper; offset by 1.
+        const siblings = Array.from(clickedTd.parentElement.querySelectorAll('td:not([style*="display:none"])'));
+        clickedColIdx  = siblings.indexOf(clickedTd);
+    }
+
+    // ── Build menu HTML ──────────────────────────────────────────
+    let html = '';
+
+    // Explore
+    html += '<div class="col-ctx-header">Explore</div>';
+    html += `<div class="col-ctx-item" onclick="askAboutRow(${rowIdx});closeRowMenu()"><span class="col-ctx-icon">→</span>Ask about this row</div>`;
+    html += `<div class="col-ctx-item" onclick="explainRow(${rowIdx});closeRowMenu()"><span class="col-ctx-icon">❓</span>Explain this row</div>`;
+    html += `<div class="col-ctx-item" onclick="compareRowToAvg(${rowIdx});closeRowMenu()"><span class="col-ctx-icon">~</span>Compare to average</div>`;
+    html += `<div class="col-ctx-item" onclick="findSimilarRows(${rowIdx});closeRowMenu()"><span class="col-ctx-icon">≡</span>Find similar rows</div>`;
+
+    // Filter / Copy
+    html += '<div class="col-ctx-sep"></div><div class="col-ctx-header">Filter \u00b7 Copy</div>';
+    if (hasCellValue && clickedColIdx >= 0 && clickedColIdx < currentResults.columns.length) {
+        const safeVal = escapeHtml(cellText);
+        html += `<div class="col-ctx-item" onclick="filterByRowCell(${rowIdx},${clickedColIdx});closeRowMenu()"><span class="col-ctx-icon">⋄</span>Filter by <em>&ldquo;${safeVal}&rdquo;</em></div>`;
+    }
+    html += `<div class="col-ctx-item" onclick="copyRowData(${rowIdx});closeRowMenu()"><span class="col-ctx-icon">⧉</span>Copy row</div>`;
+
+    // ── Position menu ─────────────────────────────────────────────
+    let menu = document.getElementById('row-ctx-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id        = 'row-ctx-menu';
+        menu.className = 'col-ctx-menu';   // reuse same visual style
+        document.body.appendChild(menu);
+    }
+    menu.innerHTML = html;
+    menu.style.display = 'block';
+
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const mw = 230, mh = menu.scrollHeight || 240;
+    menu.style.left = (event.clientX + mw > vw ? vw - mw - 8 : event.clientX) + 'px';
+    menu.style.top  = (event.clientY + mh > vh ? vh - mh - 8 : event.clientY) + 'px';
+
+    // Close on outside click, Esc, or next right-click.
+    const _close = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Escape') return;
+        closeRowMenu();
+        document.removeEventListener('click',       _close);
+        document.removeEventListener('keydown',     _close);
+        document.removeEventListener('contextmenu', _close);
+    };
+    setTimeout(() => {
+        document.addEventListener('click',       _close);
+        document.addEventListener('keydown',     _close);
+        document.addEventListener('contextmenu', _close);
+    }, 0);
+}
+
+function closeRowMenu() {
+    const m = document.getElementById('row-ctx-menu');
+    if (m) m.style.display = 'none';
+}
+
+// ── Row action implementations ───────────────────────────────────────
+
+function askAboutRow(rowIdx) {
+    const label = _rowLabel(rowIdx);
+    const q = currentQuestion
+        ? `Tell me about the row where ${label}, in the context of: ${currentQuestion}`
+        : `Tell me about the row where ${label}`;
+    fillQuestion(q);
+}
+
+function explainRow(rowIdx) {
+    const label = _rowLabel(rowIdx);
+    const q = currentQuestion
+        ? `Explain why the row (${label}) has these values, in the context of: ${currentQuestion}`
+        : `Explain the values in the row where ${label}`;
+    fillQuestion(q);
+}
+
+function compareRowToAvg(rowIdx) {
+    const label = _rowLabel(rowIdx);
+    const q = currentQuestion
+        ? `How does the row (${label}) compare to the average across all results? Context: ${currentQuestion}`
+        : `Compare the row (${label}) to the average across all results`;
+    fillQuestion(q);
+}
+
+function findSimilarRows(rowIdx) {
+    const label = _rowLabel(rowIdx);
+    const q = currentQuestion
+        ? `Find other rows similar to (${label}) in the data. Context: ${currentQuestion}`
+        : `Find rows similar to the row where ${label}`;
+    fillQuestion(q);
+}
+
+function filterByRowCell(rowIdx, colIdx) {
+    if (!currentResults || rowIdx >= _currentVisibleRows.length) return;
+    const row    = _currentVisibleRows[rowIdx];
+    const col    = currentResults.columns[colIdx];
+    const val    = Array.isArray(row) ? row[colIdx] : row[col];
+    if (val === null || val === undefined) return;
+    const valStr = String(val).toLowerCase();
+
+    // Filter all ORIGINAL rows (not just visible) so the count is relative to full data.
+    const allRows = currentResults.data || currentResults.rows;
+    const filtered = allRows.filter(r => {
+        const v = Array.isArray(r) ? r[colIdx] : r[col];
+        return v !== null && v !== undefined && String(v).toLowerCase() === valStr;
+    });
+    const container = document.getElementById('table-container');
+    if (container) container.innerHTML = renderTable(currentResults, filtered);
+    const rc = document.getElementById('row-count');
+    if (rc) rc.textContent = filtered.length + ' of ' + allRows.length + ' rows \u2014 ' + escapeHtml(col) + ' = ' + escapeHtml(String(val));
+}
+
+function copyRowData(rowIdx) {
+    if (!currentResults || rowIdx >= _currentVisibleRows.length) return;
+    const row  = _currentVisibleRows[rowIdx];
+    const cols = currentResults.columns;
+    // Tab-separated: header\tvalue pairs, then newline-separated col=val pairs
+    const text = cols.map((col, i) => {
+        const v = Array.isArray(row) ? row[i] : row[col];
+        return col + '\t' + (v === null || v === undefined ? '' : String(v));
+    }).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Row copied', 'info');
+    });
+}
+
 // Make functions globally accessible for onclick handlers
 window.askQuestion = askQuestion;
 window.toggleSql = toggleSql;
@@ -2267,6 +2439,14 @@ window.copyColValues     = copyColValues;
 window.askAboutCol       = askAboutCol;
 window.sortTableDir      = sortTableDir;
 window.reRenderTable     = reRenderTable;
+window.showRowMenu       = showRowMenu;
+window.closeRowMenu      = closeRowMenu;
+window.askAboutRow       = askAboutRow;
+window.explainRow        = explainRow;
+window.compareRowToAvg   = compareRowToAvg;
+window.findSimilarRows   = findSimilarRows;
+window.filterByRowCell   = filterByRowCell;
+window.copyRowData       = copyRowData;
 
 // ======================================================
 // THEME SYSTEM
