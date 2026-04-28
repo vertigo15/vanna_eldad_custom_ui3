@@ -1742,6 +1742,105 @@ label {
 }
 
 /* =============================================================
+   DEV DRAWER (Prompts & SQL — advanced / power-user panel)
+   ============================================================= */
+
+/* Backdrop — subtle dim, closes drawer on click */
+.dev-drawer-overlay {
+  position: fixed; inset: 0; z-index: 199;
+  background: oklch(0% 0 0 / 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 250ms ease;
+}
+.dev-drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Drawer panel — slides in from the right, below the topbar */
+.dev-drawer {
+  position: fixed;
+  top: 48px; right: 0; bottom: 0;
+  z-index: 200;
+  width: min(520px, 100vw);
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 250ms ease;
+}
+.dev-drawer.open {
+  transform: translateX(0);
+}
+
+.dev-drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.dev-drawer-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+.dev-drawer-close-btn {
+  width: 28px; height: 28px; padding: 0;
+  font-size: 20px; line-height: 1;
+  background: transparent; color: var(--color-muted);
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.dev-drawer-close-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.dev-drawer-body {
+  flex: 1; overflow-y: auto;
+  padding: var(--space-4);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-2) transparent;
+}
+.dev-drawer-body::-webkit-scrollbar { width: 8px; }
+.dev-drawer-body::-webkit-scrollbar-track { background: transparent; }
+.dev-drawer-body::-webkit-scrollbar-thumb {
+  background: var(--color-border-2);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Active-state glow on the topbar button when drawer is open */
+.topbar-icon-btn.is-active {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-2);
+  color: var(--color-accent);
+}
+
+/* Dot badge — appears once SQL is ready */
+.dev-panel-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 6px; height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  border: 1.5px solid var(--color-surface);
+  pointer-events: none;
+}
+/* The button needs relative positioning for the badge */
+#dev-panel-btn { position: relative; }
+
+@media (max-width: 600px) {
+  .dev-drawer { width: 100vw; }
+}
+
+/* =============================================================
    ASK-CARD METRICS READOUT (token usage + LLM latency)
    ============================================================= */
 .ask-metrics {

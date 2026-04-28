@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=31">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=32">
     <!-- CodeMirror 6 via ESM — exposes window.CodeMirrorService -->
     <script type="module">
       import { EditorView, lineNumbers } from 'https://esm.sh/@codemirror/view@6';
@@ -41,6 +41,10 @@
             <span class="topbar-title" id="page-title">New query</span>
         </div>
         <div class="topbar-actions">
+            <button class="topbar-icon-btn" id="dev-panel-btn" aria-label="Prompts &amp; SQL" title="Prompts &amp; SQL">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <span class="dev-panel-badge" id="dev-panel-badge" hidden></span>
+            </button>
             <button class="topbar-icon-btn" id="history-btn" aria-label="History" title="History">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </button>
@@ -203,42 +207,6 @@
                         <div id="profiling-content" class="profiling-content" style="display: none;"></div>
                     </div>
 
-                    <div class="card">
-                        <h2>Prompts &amp; SQL</h2>
-
-                        <!-- Tab Navigation -->
-                        <div class="prompt-tabs" role="tablist">
-                            <button class="prompt-tab active" onclick="switchPromptTab('sql')" id="tab-sql" role="tab" aria-selected="true" aria-controls="content-sql">Generated SQL</button>
-                            <button class="prompt-tab" onclick="switchPromptTab('query')" id="tab-query" role="tab" aria-selected="false" aria-controls="content-query">Query Prompt</button>
-                            <button class="prompt-tab" onclick="switchPromptTab('insights')" id="tab-insights" role="tab" aria-selected="false" aria-controls="content-insights">Insights Prompt</button>
-                            <button class="prompt-tab" onclick="switchPromptTab('chart')" id="tab-chart" role="tab" aria-selected="false" aria-controls="content-chart">Chart Prompt</button>
-                        </div>
-
-                        <div class="prompt-tab-content" style="display: none;">
-                            <div id="content-sql" class="tab-pane active" role="tabpanel" aria-labelledby="tab-sql">
-                                <div class="sql-editor-wrapper">
-                                    <div id="sql-editor" aria-label="Generated SQL"></div>
-                                    <button class="sql-copy-btn" onclick="copySql()" aria-label="Copy SQL to clipboard">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                                        Copy
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="content-query" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-query">
-                                <div id="prompt-content" class="prompt-content"></div>
-                            </div>
-                            <div id="content-insights" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-insights">
-                                <div id="insights-prompt-content" class="prompt-content">
-                                    <p style="color: var(--color-faint);">Insights prompt will appear here after insights are generated.</p>
-                                </div>
-                            </div>
-                            <div id="content-chart" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-chart">
-                                <div id="chart-prompt-content" class="prompt-content">
-                                    <p style="color: var(--color-faint);">Chart prompt will appear here after a chart is generated.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
                 </div><!-- /results-section -->
             </div><!-- /main-inner -->
@@ -247,8 +215,49 @@
     </div><!-- /layout-body -->
 </div><!-- /app-layout -->
 
-<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=31"></script>
-<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=31"></script>
-<script src="{{ url_for('static', filename='script.js') }}?v=31"></script>
+<!-- ── Dev Drawer (Prompts & SQL) ───────────────────────────────── -->
+<div id="dev-drawer-overlay" class="dev-drawer-overlay" aria-hidden="true"></div>
+<aside id="dev-drawer" class="dev-drawer" aria-label="Developer panel" aria-hidden="true">
+    <div class="dev-drawer-header">
+        <h2 class="dev-drawer-title">Prompts &amp; SQL</h2>
+        <button class="dev-drawer-close-btn" id="dev-drawer-close" aria-label="Close developer panel">×</button>
+    </div>
+    <div class="dev-drawer-body">
+        <div class="prompt-tabs" role="tablist">
+            <button class="prompt-tab active" onclick="switchPromptTab('sql')" id="tab-sql" role="tab" aria-selected="true" aria-controls="content-sql">Generated SQL</button>
+            <button class="prompt-tab" onclick="switchPromptTab('query')" id="tab-query" role="tab" aria-selected="false" aria-controls="content-query">Query Prompt</button>
+            <button class="prompt-tab" onclick="switchPromptTab('insights')" id="tab-insights" role="tab" aria-selected="false" aria-controls="content-insights">Insights Prompt</button>
+            <button class="prompt-tab" onclick="switchPromptTab('chart')" id="tab-chart" role="tab" aria-selected="false" aria-controls="content-chart">Chart Prompt</button>
+        </div>
+        <div class="prompt-tab-content" style="display: none;">
+            <div id="content-sql" class="tab-pane active" role="tabpanel" aria-labelledby="tab-sql">
+                <div class="sql-editor-wrapper">
+                    <div id="sql-editor" aria-label="Generated SQL"></div>
+                    <button class="sql-copy-btn" onclick="copySql()" aria-label="Copy SQL to clipboard">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        Copy
+                    </button>
+                </div>
+            </div>
+            <div id="content-query" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-query">
+                <div id="prompt-content" class="prompt-content"></div>
+            </div>
+            <div id="content-insights" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-insights">
+                <div id="insights-prompt-content" class="prompt-content">
+                    <p style="color: var(--color-faint);">Insights prompt will appear here after insights are generated.</p>
+                </div>
+            </div>
+            <div id="content-chart" class="tab-pane" style="display: none;" role="tabpanel" aria-labelledby="tab-chart">
+                <div id="chart-prompt-content" class="prompt-content">
+                    <p style="color: var(--color-faint);">Chart prompt will appear here after a chart is generated.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<script src="{{ url_for('static', filename='insights/insightsManager.js') }}?v=32"></script>
+<script src="{{ url_for('static', filename='profiling/profilingManager.js') }}?v=32"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=32"></script>
 </body>
 </html>
