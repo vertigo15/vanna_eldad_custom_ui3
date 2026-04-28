@@ -84,9 +84,54 @@ class MetadataLoader:
         else:
             self._cache.pop(source_key, None)
             self._cache.pop(f"kq::{source_key}", None)
+            self._cache.pop(f"tables_rich::{source_key}", None)
             # Drop column caches (per-table and ALL).
             for k in [k for k in self._cache if k.startswith(f"cols::{source_key}::")]:
                 self._cache.pop(k, None)
+
+    async def load_tables_rich(
+        self, source_key: str
+    ) -> List[Dict[str, Any]]:
+        """Return all catalogued tables with description + visible column count.
+
+        Sourced entirely from the metadata DB — not from a live connection.
+        Cached under ``tables_rich::<source_key>``.
+        """
+        now = time.monotonic()
+        cache_key = f"tables_rich::{source_key}"
+        cached = self._cache.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]  # type: ignore[return-value]
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    t.table_name,
+                    t.table_description,
+                    COUNT(c.column_name)
+                        FILTER (WHERE NOT COALESCE(c.is_hidden, FALSE)) AS col_count
+                FROM public.metadata_tables t
+                LEFT JOIN public.metadata_columns c
+                    ON  c.source            = t.source
+                    AND lower(c.table_name) = lower(t.table_name)
+                WHERE t.source = $1
+                GROUP BY t.table_name, t.table_description
+                ORDER BY t.table_name
+                """,
+                source_key,
+            )
+
+        items: List[Dict[str, Any]] = [
+            {
+                "name":        r["table_name"],
+                "description": r["table_description"],
+                "col_count":   int(r["col_count"] or 0),
+            }
+            for r in rows
+        ]
+        self._cache[cache_key] = (now + _CACHE_TTL_SECONDS, items)
+        return items
 
     async def load_knowledge_questions(self, source_key: str) -> List[Dict[str, Any]]:
         """Lean fetch of `knowledge_pairs.question` (+ category, tags) for autocomplete.

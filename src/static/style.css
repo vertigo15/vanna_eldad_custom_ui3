@@ -927,6 +927,28 @@ label {
   padding: var(--space-2) 0; font-style: italic;
 }
 
+/* Description subtitle under table name */
+.table-description {
+  font-size: var(--text-xs);
+  color: var(--color-faint);
+  font-style: italic;
+  padding: 1px var(--space-3) 4px 30px; /* indent under the table icon */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  transition: color 100ms ease;
+}
+.table-item.is-active .table-description { color: var(--color-muted); }
+/* Search highlight inside name or description */
+.table-item-header mark,
+.table-description mark {
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: var(--weight-semibold);
+  font-style: normal;
+}
+
 /* Table count badge in section header */
 .table-count-badge {
   font-size: 10px; font-family: var(--font-mono);
