@@ -1814,6 +1814,11 @@ function initCodeMirror(sqlContent) {
         state: EditorState.create({ doc: sqlContent || '', extensions }),
         parent: container
     });
+
+    // Signal that SQL is available — show badge on the topbar button.
+    if (typeof window._devDrawerShowBadge === 'function') {
+        window._devDrawerShowBadge();
+    }
 }
 
 // ======================================================
@@ -2784,6 +2789,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Custom connection switcher (replaces the native <select>).
     if (typeof ConnectionPanel !== 'undefined') ConnectionPanel.init();
+
+    // ── Dev Drawer (Prompts & SQL) ──────────────────────────────────────
+    (function () {
+        const drawer  = document.getElementById('dev-drawer');
+        const overlay = document.getElementById('dev-drawer-overlay');
+        const btn     = document.getElementById('dev-panel-btn');
+        const closeBtn = document.getElementById('dev-drawer-close');
+        const badge   = document.getElementById('dev-panel-badge');
+        if (!drawer || !overlay || !btn) return;
+
+        let isOpen = false;
+
+        function open() {
+            if (isOpen) return;
+            isOpen = true;
+            drawer.classList.add('open');
+            overlay.classList.add('open');
+            btn.classList.add('is-active');
+            drawer.setAttribute('aria-hidden', 'false');
+            overlay.setAttribute('aria-hidden', 'false');
+            // Auto-reveal tab content so the first tab is immediately visible.
+            const tabContent = drawer.querySelector('.prompt-tab-content');
+            if (tabContent && tabContent.style.display === 'none') {
+                switchPromptTab('sql');
+            }
+        }
+
+        function close() {
+            if (!isOpen) return;
+            isOpen = false;
+            drawer.classList.remove('open');
+            overlay.classList.remove('open');
+            btn.classList.remove('is-active');
+            drawer.setAttribute('aria-hidden', 'true');
+            overlay.setAttribute('aria-hidden', 'true');
+            btn.focus();
+        }
+
+        function toggle() { isOpen ? close() : open(); }
+
+        btn.addEventListener('click', toggle);
+        if (closeBtn) closeBtn.addEventListener('click', close);
+        overlay.addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+            if (isOpen && e.key === 'Escape') { e.preventDefault(); close(); }
+        });
+
+        // Expose so initCodeMirror (called after SQL loads) can show the badge.
+        window._devDrawerShowBadge = function () {
+            if (badge) badge.hidden = false;
+        };
+        window._devDrawerOpen  = open;
+        window._devDrawerClose = close;
+    })();
 
     // Settings panel + preferences. Loaded as ES modules so they're tree-
     // shake-friendly and the rest of script.js stays import-free.
