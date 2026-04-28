@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.api.dependencies import resolve_agent
+from src.api.dependencies import get_metadata_loader, resolve_agent
 from src.api.models import QueryRequest, QueryResponse
+from src.metadata import MetadataLoader
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["query"])
@@ -44,6 +45,24 @@ async def list_tables(
         return {"tables": tables}
     except Exception as e:  # noqa: BLE001
         logger.exception("Error listing tables")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/tables-rich")
+async def list_tables_rich(
+    connection: str = Query(..., description="source_key of the active connection"),
+    loader: MetadataLoader = Depends(get_metadata_loader),
+):
+    """Return all catalogued tables from the metadata DB with descriptions and column counts.
+
+    Sourced from ``public.metadata_tables`` — not from a live connection query.
+    Each entry includes ``name``, ``description`` (nullable), and ``col_count``.
+    """
+    try:
+        tables = await loader.load_tables_rich(connection)
+        return {"tables": tables}
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error listing rich tables for connection %r", connection)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

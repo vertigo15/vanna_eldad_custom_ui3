@@ -43,6 +43,10 @@ const TABLE_ICON_SVG = '<svg class="table-icon" width="14" height="14" viewBox="
 // Set of table names that are currently expanded in the sidebar
 const _tableExpandedSet = new Set();
 
+// Rich table data from the metadata catalog: [{name, description, col_count}]
+// Stays in sync with allTables (name-only string[]) which is kept for autocomplete.
+let allTablesRich = [];
+
 // ── Column presentation state (resets per query) ──────────────
 let _colFormats  = {};  // colIndex → { type, icon, label }
 let _derivedCols = [];  // [{ sourceIndex, type, name }]
@@ -127,8 +131,9 @@ function onConnectionChange(sourceKey) {
     const activeRow = availableConnections.find(c => c.source_key === newConnection);
     setConnectionPillName(activeRow ? activeRow.display_name : newConnection);
     setConnectionStatus('connecting');
-        // Reset autocomplete caches and table expand state (connection-specific).
+        // Reset autocomplete caches, rich table data, and table expand state.
         _tableExpandedSet.clear();
+        allTablesRich = [];
         if (typeof SuggestionController !== 'undefined') SuggestionController.reset();
     // Auto-load tables for the new connection.
     loadTables();
@@ -822,8 +827,8 @@ function togglePrompt() {
     }
 }
 
-// Load tables. Also drives the connection-status dot:
-// connecting → ok (on success or empty) → error (on fetch failure).
+// Load tables from the metadata catalog (description + col count included).
+// Drives the connection-status dot: connecting → ok → error.
 async function loadTables() {
     const tablesList = document.getElementById('tables-list');
     const searchInput = document.getElementById('table-search');
@@ -838,18 +843,23 @@ async function loadTables() {
 
     setConnectionStatus('connecting');
     try {
-        const response = await fetch('/api/tables?connection=' + encodeURIComponent(connection));
+        const response = await fetch('/api/tables-rich?connection=' + encodeURIComponent(connection));
         const data = await response.json();
 
         if (data.tables && data.tables.length > 0) {
-            allTables = data.tables;
+            allTablesRich = data.tables;                          // [{name, description, col_count}]
+            allTables     = data.tables.map(t => t.name);        // string[] kept for autocomplete
             searchInput.style.display = 'block';
-            displayFilteredTables(allTables);
-            // Update count badge in sidebar header
+            displayFilteredTables(allTablesRich);
             const countBadge = document.getElementById('table-count-badge');
             if (countBadge) countBadge.textContent = allTables.length;
         } else {
-            tablesList.innerHTML = '<p style="color: var(--color-faint); font-size: var(--text-xs); padding: 4px 0;">No tables found</p>';
+            allTablesRich = [];
+            allTables     = [];
+            const msg = data.tables && data.tables.length === 0
+                ? 'No tables in catalog \u2014 refresh metadata first'
+                : 'No tables found';
+            tablesList.innerHTML = `<p style="color: var(--color-faint); font-size: var(--text-xs); padding: 4px 0;">${msg}</p>`;
             const countBadge = document.getElementById('table-count-badge');
             if (countBadge) countBadge.textContent = '';
         }
@@ -861,14 +871,32 @@ async function loadTables() {
     }
 }
 
-// Filter tables based on search
+// Filter tables — searches both name AND description from the metadata catalog.
 function filterTables() {
     const searchTerm = document.getElementById('table-search').value.toLowerCase();
-    const filtered = allTables.filter(table => table.toLowerCase().includes(searchTerm));
+    if (!searchTerm) {
+        displayFilteredTables(allTablesRich);
+        return;
+    }
+    const filtered = allTablesRich.filter(t =>
+        t.name.toLowerCase().includes(searchTerm) ||
+        (t.description && t.description.toLowerCase().includes(searchTerm))
+    );
     displayFilteredTables(filtered);
 }
 
-// Display filtered tables — accordion layout with column expand, action buttons, count badge.
+// Highlight a search term inside `text`. Returns HTML-escaped string with <mark> tags.
+function _highlightTableSearch(text, term) {
+    if (!term || !text) return escapeHtml(text || '');
+    const idx = text.toLowerCase().indexOf(term.toLowerCase());
+    if (idx === -1) return escapeHtml(text);
+    return escapeHtml(text.slice(0, idx))
+        + '<mark>' + escapeHtml(text.slice(idx, idx + term.length)) + '</mark>'
+        + escapeHtml(text.slice(idx + term.length));
+}
+
+// Display filtered tables — accordion layout with description, col count, hover actions.
+// `tables` is [{name, description, col_count}] from the metadata catalog.
 function displayFilteredTables(tables) {
     const tablesList = document.getElementById('tables-list');
     if (tables.length === 0) {
@@ -876,26 +904,44 @@ function displayFilteredTables(tables) {
         return;
     }
     const conn = getActiveConnection();
-    tablesList.innerHTML = tables.map(table => {
-        const safe = escapeHtml(table);
-        const safeJS = table.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const isActive = activeTable === table ? ' is-active' : '';
-        const isExpanded = _tableExpandedSet.has(table);
-        // Column count from cache (may be unknown yet)
-        const cacheKey = conn + '|' + table;
-        const cached = _columnsCache.get(cacheKey);
-        const colCountBadge = cached
-            ? `<span class="table-col-count">${cached.length}</span>`
-            : '';
+    // Current search term (for highlighting)
+    const searchInput = document.getElementById('table-search');
+    const term = (searchInput && searchInput.value || '').toLowerCase();
+
+    tablesList.innerHTML = tables.map(tableObj => {
+        // Support both object ({name,...}) and plain string (legacy fallback)
+        const name        = (tableObj && tableObj.name) ? tableObj.name : String(tableObj);
+        const description = tableObj && tableObj.description ? tableObj.description : null;
+        const catalogColCount = (tableObj && tableObj.col_count) ? tableObj.col_count : 0;
+
+        const safe   = escapeHtml(name);
+        const safeJS = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isActive   = activeTable === name ? ' is-active' : '';
+        const isExpanded = _tableExpandedSet.has(name);
+
+        // Col count: prefer catalog value, fall back to already-fetched cache
+        const cacheKey = conn + '|' + name;
+        const cached   = _columnsCache.get(cacheKey);
+        const colCount = catalogColCount > 0 ? catalogColCount : (cached ? cached.length : null);
+        const colCountBadge = colCount ? `<span class="table-col-count">${colCount}</span>` : '';
+
         const arrowClass = 'table-expand-arrow' + (isExpanded ? ' open' : '');
         const colsHtml = isExpanded && cached
             ? renderTableColumns(cached)
-            : (isExpanded ? '<div class="table-cols-loading">Loading…</div>' : '');
+            : (isExpanded ? '<div class="table-cols-loading">Loading\u2026</div>' : '');
+
+        // Description subtitle with search-term highlighting
+        const descHtml = description
+            ? `<div class="table-description" title="${escapeHtml(description)}">${_highlightTableSearch(description, term)}</div>`
+            : '';
+
+        // Highlighted table name
+        const highlightedName = term ? _highlightTableSearch(name, term) : safe;
 
         return `<div class="table-item${isActive}" data-table="${safe}">
   <div class="table-item-header" onclick="toggleTableExpand('${safeJS}')">
     ${TABLE_ICON_SVG}
-    <span class="table-name" title="${safe}">${safe}</span>
+    <span class="table-name" title="${safe}">${highlightedName}</span>
     ${colCountBadge}
     <div class="table-item-actions">
       <button class="table-action-btn" onclick="event.stopPropagation();selectTableExplore('${safeJS}')" title="Explore data">→</button>
@@ -904,6 +950,7 @@ function displayFilteredTables(tables) {
     </div>
     <span class="${arrowClass}">&#9656;</span>
   </div>
+  ${descHtml}
   <div class="table-columns-list${isExpanded ? ' open' : ''}" id="tbl-cols-${safe}">${colsHtml}</div>
 </div>`;
     }).join('');
@@ -1018,8 +1065,10 @@ function selectTable(table) {
     const searchInput = document.getElementById('table-search');
     const term = (searchInput && searchInput.value || '').toLowerCase();
     const filtered = term
-        ? allTables.filter(t => t.toLowerCase().includes(term))
-        : allTables;
+        ? allTablesRich.filter(t =>
+            t.name.toLowerCase().includes(term) ||
+            (t.description && t.description.toLowerCase().includes(term)))
+        : allTablesRich;
     displayFilteredTables(filtered);
 }
 
