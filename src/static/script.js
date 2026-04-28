@@ -1418,11 +1418,15 @@ async function displayHistory() {
         recentQuestionsCache = recentQuestions.slice();
         pinnedQuestionsCache = pinnedQuestions.slice();
 
+        // Show/hide the sidebar search input depending on whether there are items.
+        const questionSearchInput = document.getElementById('question-search');
         if (pinnedQuestions.length === 0 && recentQuestions.length === 0) {
             historyDiv.innerHTML = '<p class="history-empty">No questions yet — ask one above and it\'ll show up here.</p>';
             clearBtn.style.display = 'none';
+            if (questionSearchInput) { questionSearchInput.style.display = 'none'; questionSearchInput.value = ''; }
             return;
         }
+        if (questionSearchInput) questionSearchInput.style.display = 'block';
         
         clearBtn.style.display = 'none';  // Hide clear button since history is from DB
         
@@ -1509,6 +1513,103 @@ function clearHistory() {
     // Clearing history would require database operations
     // This function is kept for compatibility but does nothing
     console.log('History is managed in the database');
+}
+
+// Filter the sidebar recent-questions list in real time.
+function filterQuestionHistory() {
+    const q = (document.getElementById('question-search')?.value || '').toLowerCase().trim();
+    const items = document.querySelectorAll('#question-history .history-item');
+    let shown = 0;
+    items.forEach(item => {
+        const text = (item.querySelector('.question-text')?.textContent || '').toLowerCase();
+        const match = !q || text.includes(q);
+        item.style.display = match ? '' : 'none';
+        if (match) shown++;
+    });
+    // If nothing matches, show a soft message.
+    let noMsg = document.getElementById('question-search-empty');
+    if (!noMsg) {
+        noMsg = document.createElement('p');
+        noMsg.id = 'question-search-empty';
+        noMsg.className = 'history-empty';
+        noMsg.textContent = 'No matching questions.';
+        document.getElementById('question-history')?.after(noMsg);
+    }
+    noMsg.style.display = (q && shown === 0) ? '' : 'none';
+}
+
+// ── History Log Drawer ───────────────────────────────────────────────
+let _historyLogEntries = []; // full list from API, used for client-side filter
+
+function _relTime(isoStr) {
+    if (!isoStr) return '';
+    const diff = Date.now() - new Date(isoStr).getTime();
+    const s = Math.floor(diff / 1000);
+    if (s < 60)  return 'just now';
+    const m = Math.floor(s / 60);
+    if (m < 60)  return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24)  return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return `${d}d ago`;
+}
+
+function _renderHistoryEntries(entries) {
+    const body = document.getElementById('history-drawer-body');
+    if (!body) return;
+    if (!entries.length) {
+        body.innerHTML = '<p class="history-log-empty">No queries yet for this connection.</p>';
+        return;
+    }
+    body.innerHTML = entries.map(e => {
+        const statusLabel = e.status || 'unknown';
+        const time  = _relTime(e.asked_at);
+        const parts = [];
+        if (e.tokens)   parts.push(`${e.tokens} tok`);
+        if (e.llm_ms)   parts.push(`LLM ${e.llm_ms}ms`);
+        if (e.exec_ms)  parts.push(`exec ${e.exec_ms}ms`);
+        if (e.row_count !== null && e.row_count !== undefined) parts.push(`${e.row_count} rows`);
+        const metaStr = [time, ...parts].filter(Boolean).join('<span class="history-log-dot">&nbsp;·&nbsp;</span>');
+        const question = escapeHtml(e.question || '(empty)');
+        const safeQ = (e.question || '').replace(/'/g, "\\'");
+        return `<div class="history-log-entry" onclick="fillQuestion('${escapeHtml(safeQ)}')">
+  <div class="history-log-entry-question">${question}</div>
+  <div class="history-log-meta">
+    <span class="history-log-status" data-status="${statusLabel}">${statusLabel}</span>
+    ${metaStr}
+  </div>
+</div>`;
+    }).join('');
+}
+
+async function loadHistoryLog() {
+    const connection = getActiveConnection();
+    const body = document.getElementById('history-drawer-body');
+    if (!connection) {
+        if (body) body.innerHTML = '<p class="history-log-empty">Pick a connection first.</p>';
+        return;
+    }
+    if (body) body.innerHTML = '<p class="history-log-empty">Loading…</p>';
+    try {
+        const res = await fetch(`/api/user/history-log?connection=${encodeURIComponent(connection)}&limit=100`);
+        const data = await res.json();
+        _historyLogEntries = data.entries || [];
+        _renderHistoryEntries(_historyLogEntries);
+    } catch (err) {
+        console.error('[HistoryLog]', err);
+        if (body) body.innerHTML = '<p class="history-log-empty">Failed to load history.</p>';
+    }
+}
+
+function filterHistoryLog() {
+    const q = (document.getElementById('history-log-search')?.value || '').toLowerCase().trim();
+    if (!q) {
+        _renderHistoryEntries(_historyLogEntries);
+        return;
+    }
+    _renderHistoryEntries(_historyLogEntries.filter(e =>
+        (e.question || '').toLowerCase().includes(q)
+    ));
 }
 
 // Chart Feature Initialization
@@ -3529,6 +3630,48 @@ document.addEventListener('DOMContentLoaded', () => {
     // Custom connection switcher (replaces the native <select>).
     if (typeof ConnectionPanel !== 'undefined') ConnectionPanel.init();
 
+    // ── History Drawer ──────────────────────────────────────────────────
+    (function () {
+        const drawer  = document.getElementById('history-drawer');
+        const overlay = document.getElementById('history-drawer-overlay');
+        const btn     = document.getElementById('history-btn');
+        const closeBtn = document.getElementById('history-drawer-close');
+        if (!drawer || !overlay || !btn) return;
+
+        let isOpen = false;
+
+        function open() {
+            if (isOpen) return;
+            isOpen = true;
+            drawer.classList.add('open');
+            overlay.classList.add('open');
+            btn.classList.add('is-active');
+            drawer.setAttribute('aria-hidden', 'false');
+            overlay.setAttribute('aria-hidden', 'false');
+            loadHistoryLog();
+        }
+
+        function close() {
+            if (!isOpen) return;
+            isOpen = false;
+            drawer.classList.remove('open');
+            overlay.classList.remove('open');
+            btn.classList.remove('is-active');
+            drawer.setAttribute('aria-hidden', 'true');
+            overlay.setAttribute('aria-hidden', 'true');
+            btn.focus();
+        }
+
+        function toggle() { isOpen ? close() : open(); }
+
+        btn.addEventListener('click', toggle);
+        if (closeBtn) closeBtn.addEventListener('click', close);
+        overlay.addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+            if (isOpen && e.key === 'Escape') { e.preventDefault(); close(); }
+        });
+    })();
+
     // ── Dev Drawer (Prompts & SQL) ──────────────────────────────────────
     (function () {
         const drawer  = document.getElementById('dev-drawer');
@@ -3662,6 +3805,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.filterResults = filterResults;
     window.pinQuestion = pinQuestion;
     window.unpinQuestion = unpinQuestion;
+    window.filterQuestionHistory = filterQuestionHistory;
+    window.loadHistoryLog = loadHistoryLog;
+    window.filterHistoryLog = filterHistoryLog;
     window.togglePromptSection = togglePromptSection;
     window.switchPromptTab = switchPromptTab;
     window.toggleSidebar = toggleSidebar;

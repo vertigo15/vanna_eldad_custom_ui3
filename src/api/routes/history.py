@@ -60,6 +60,19 @@ async def unpin_question(request: PinQuestionRequest):
     return {"success": True, "message": "Question unpinned"}
 
 
+@router.get("/user/history-log")
+async def get_history_log(
+    connection: str = Query(...),
+    user_id: str = "default",
+    limit: int = 100,
+):
+    history = get_history_service()
+    entries = await history.get_history_log(
+        user_id=user_id, source_key=connection, limit=limit
+    )
+    return {"entries": entries}
+
+
 @router.post("/feedback")
 async def record_feedback(request: FeedbackRequest):
     history = get_history_service()
