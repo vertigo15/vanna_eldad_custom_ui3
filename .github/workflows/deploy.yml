@@ -1,0 +1,124 @@
+name: CI / Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:          # allows manual trigger from GitHub UI
+
+env:
+  API_IMAGE: jeen-insights-api
+  UI_IMAGE:  jeen-insights-ui
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────
+  # 1. Run unit tests
+  # ────────────────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        run: pytest
+
+  # ────────────────────────────────────────────────────────────────────
+  # 2. Build Docker images and push to ACR
+  # ────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image-tag: ${{ steps.tag.outputs.value }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag (short SHA)
+        id: tag
+        run: echo "value=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # -- API image -------------------------------------------------------
+      - name: Build & push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.API_IMAGE }}:latest
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.API_IMAGE }}:${{ steps.tag.outputs.value }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      # -- UI image --------------------------------------------------------
+      - name: Build & push UI image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.ui
+          push: true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.UI_IMAGE }}:latest
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.UI_IMAGE }}:${{ steps.tag.outputs.value }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ────────────────────────────────────────────────────────────────────
+  # 3. Deploy to Azure Container Apps
+  # ────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production       # optional: adds a manual approval gate in GitHub
+
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy API container app
+        run: |
+          az containerapp update \
+            --name "${{ env.API_IMAGE }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ secrets.ACR_LOGIN_SERVER }}/${{ env.API_IMAGE }}:${{ needs.build-and-push.outputs.image-tag }}"
+
+      - name: Deploy UI container app
+        run: |
+          az containerapp update \
+            --name "${{ env.UI_IMAGE }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ secrets.ACR_LOGIN_SERVER }}/${{ env.UI_IMAGE }}:${{ needs.build-and-push.outputs.image-tag }}"
+
+      - name: Print deployed URLs
+        run: |
+          echo "API: $(az containerapp show \
+            --name ${{ env.API_IMAGE }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)"
+          echo "UI:  $(az containerapp show \
+            --name ${{ env.UI_IMAGE }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)"
