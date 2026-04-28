@@ -43,6 +43,11 @@ const TABLE_ICON_SVG = '<svg class="table-icon" width="14" height="14" viewBox="
 // Set of table names that are currently expanded in the sidebar
 const _tableExpandedSet = new Set();
 
+// ── Column presentation state (resets per query) ──────────────
+let _colFormats  = {};  // colIndex → { type, icon, label }
+let _derivedCols = [];  // [{ sourceIndex, type, name }]
+let _colSums     = {};  // colIndex → numeric sum (for % of total)
+
 function getActiveConnection() {
     return localStorage.getItem(CONNECTION_STORAGE_KEY) || '';
 }
@@ -210,6 +215,11 @@ async function askQuestion() {
 
 // Display results
 function displayResults(data) {
+    // Reset column presentation state for every new result set
+    _colFormats  = {};
+    _derivedCols = [];
+    _colSums     = {};
+
     // Reset toggle states
     sqlExpanded = false;
     promptExpanded = false;
@@ -346,30 +356,88 @@ function formatResultsAsTable(results) {
     return html;
 }
 
-// Render the actual table with dim badges + tabular-nums.
+// Render the actual table with dim badges + tabular-nums + context menu + derived cols.
 function renderTable(results, rows) {
     const profile = profileColumns(results, rows);
 
+    // Pre-compute column sums for derived ‘% of total’ columns.
+    _derivedCols.forEach(d => {
+        if (d.type === 'pct_total' && _colSums[d.sourceIndex] === undefined) {
+            let sum = 0;
+            rows.forEach(row => {
+                const v = Number(Array.isArray(row) ? row[d.sourceIndex] : row[results.columns[d.sourceIndex]]);
+                if (Number.isFinite(v)) sum += v;
+            });
+            _colSums[d.sourceIndex] = sum || 1;
+        }
+    });
+
     let html = '<table id="results-table"><thead><tr>';
     results.columns.forEach((column, index) => {
-        const sortIcon = sortColumn === index ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
+        const sortIcon = sortColumn === index ? (sortDirection === 'asc' ? ' \u25b2' : ' \u25bc') : '';
         const isNum = profile.numericCols.has(index);
         const cls = isNum ? ' class="num-cell"' : '';
-        html += `<th${cls} onclick="sortTable(${index})" style="cursor: pointer;" title="Click to sort">${escapeHtml(column)}${sortIcon}</th>`;
+        const fmt = _colFormats[index];
+        const fmtTag = fmt ? `<span class="col-fmt-tag">${escapeHtml(fmt.icon)}</span>` : '';
+        html += `<th${cls}
+          onclick="sortTable(${index})"
+          oncontextmenu="showColMenu(event,${index});return false;"
+          title="Click to sort \u00b7 Right-click for options"
+        >${escapeHtml(column)}${fmtTag}${sortIcon}</th>`;
+        // Derived column header immediately after its source.
+        const derived = _derivedCols.find(d => d.sourceIndex === index);
+        if (derived) {
+            html += `<th class="derived-col-header" oncontextmenu="return false;">${escapeHtml(derived.name)}</th>`;
+        }
     });
     html += '</tr></thead><tbody>';
 
-    rows.forEach(row => {
+    const runTotals = {};
+    rows.forEach((row, rowIdx) => {
         html += '<tr class="data-row">';
         results.columns.forEach((column, idx) => {
             const cell = Array.isArray(row) ? row[idx] : row[column];
             html += renderCellHtml(cell, idx, profile);
+
+            // Derived cell after source column.
+            const derived = _derivedCols.find(d => d.sourceIndex === idx);
+            if (derived) {
+                const numVal = Number(Array.isArray(row) ? row[idx] : row[column]);
+                let derivedText, derivedCls = 'derived-col';
+
+                if (derived.type === 'pct_total') {
+                    derivedText = Number.isFinite(numVal)
+                        ? (numVal / (_colSums[idx] || 1) * 100).toFixed(1) + '%'
+                        : '\u2014';
+                } else if (derived.type === 'running_total') {
+                    if (!runTotals[idx]) runTotals[idx] = 0;
+                    if (Number.isFinite(numVal)) runTotals[idx] += numVal;
+                    derivedText = Number.isFinite(numVal) ? formatNumeric(runTotals[idx]) : '\u2014';
+                } else if (derived.type === 'delta') {
+                    if (rowIdx === 0) {
+                        derivedText = '\u2014';
+                    } else {
+                        const prev = Number(Array.isArray(rows[rowIdx-1]) ? rows[rowIdx-1][idx] : rows[rowIdx-1][column]);
+                        if (Number.isFinite(numVal) && Number.isFinite(prev)) {
+                            const d = numVal - prev;
+                            const sign = d >= 0 ? '+' : '';
+                            derivedText = sign + formatNumeric(d);
+                            derivedCls = d >= 0 ? 'derived-col derived-positive' : 'derived-col derived-negative';
+                        } else {
+                            derivedText = '\u2014';
+                        }
+                    }
+                } else {
+                    derivedText = '\u2014';
+                }
+                html += `<td class="${derivedCls}">${escapeHtml(String(derivedText))}</td>`;
+            }
         });
         html += '</tr>';
     });
 
     html += '</tbody></table>';
-    html += `<p style="margin-top: 12px; color: var(--color-muted); font-size: var(--text-xs);" id="row-count">${rows.length} row${rows.length !== 1 ? 's' : ''}</p>`;
+    html += `<p style="margin-top:12px;color:var(--color-muted);font-size:var(--text-xs);" id="row-count">${rows.length} row${rows.length !== 1 ? 's' : ''}</p>`;
     return html;
 }
 
@@ -379,6 +447,11 @@ function renderTable(results, rows) {
 function renderCellHtml(value, colIndex, profile) {
     if (value === null || value === undefined || value === '') {
         return '<td><em style="color: var(--color-faint);">NULL</em></td>';
+    }
+    // Custom format override takes priority.
+    if (_colFormats[colIndex]) {
+        const fmt = applyColFormatValue(value, _colFormats[colIndex].type);
+        if (fmt !== null) return `<td class="num-cell">${escapeHtml(fmt)}</td>`;
     }
     if (profile.dimCols.has(colIndex)) {
         return `<td><span class="dim-badge">${escapeHtml(String(value))}</span></td>`;
@@ -1853,6 +1926,273 @@ function switchStatsTab(tabName) {
     event.target.classList.add('active');
 }
 
+// ======================================================
+// TOAST NOTIFICATION (global)
+// ======================================================
+function showToast(message, type) {
+    const t = document.createElement('div');
+    t.className = 'toast toast-' + (type || 'info');
+    t.textContent = message;
+    document.body.appendChild(t);
+    setTimeout(() => t.classList.add('show'), 50);
+    setTimeout(() => {
+        t.classList.remove('show');
+        setTimeout(() => t.remove(), 300);
+    }, 2800);
+}
+
+// ======================================================
+// COLUMN CONTEXT MENU
+// ======================================================
+
+// Apply a named format to a raw cell value. Returns formatted string or null.
+function applyColFormatValue(value, type) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    switch (type) {
+        case 'currency': return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        case 'percent':  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+        case 'compact':  return compactNumber(n);
+        case 'integer':  return Math.round(n).toLocaleString('en-US');
+        case 'dec0':     return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        case 'dec1':     return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        case 'dec2':     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        case 'dec4':     return n.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+        default: return null;
+    }
+}
+
+function compactNumber(n) {
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (abs >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (abs >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+// Show the column context menu at the cursor position.
+function showColMenu(event, colIndex) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!currentResults) return;
+
+    const colName   = currentResults.columns[colIndex];
+    const rows      = currentResults.data || currentResults.rows;
+    const profile   = profileColumns(currentResults, rows);
+    const isNumeric = profile.numericCols.has(colIndex);
+    const currentFmt = _colFormats[colIndex];
+    const hasDerived = _derivedCols.some(d => d.sourceIndex === colIndex);
+
+    // Pre-compute sum for % of total
+    if (isNumeric && _colSums[colIndex] === undefined) {
+        let sum = 0;
+        rows.forEach(row => {
+            const v = Number(Array.isArray(row) ? row[colIndex] : row[colName]);
+            if (Number.isFinite(v)) sum += v;
+        });
+        _colSums[colIndex] = sum || 1;
+    }
+
+    // ── Build menu HTML ──────────────────────────────────────────
+    const FORMATS = [
+        { type: 'dec2',     icon: '1,23',  label: 'Number (2 dec)'   },
+        { type: 'currency', icon: '$',     label: 'Currency ($)'     },
+        { type: 'percent',  icon: '%',     label: 'Percentage (%)'   },
+        { type: 'compact',  icon: '1K',    label: 'Compact (1.2K)'   },
+        { type: 'integer',  icon: '123',   label: 'Integer'           },
+        { type: 'dec0',     icon: '.0',    label: '0 decimals'        },
+        { type: 'dec1',     icon: '.0',    label: '1 decimal'         },
+        { type: 'dec4',     icon: '.0000', label: '4 decimals'        },
+    ];
+
+    let html = '';
+
+    // Sort
+    html += '<div class="col-ctx-header">Sort</div>';
+    html += `<div class="col-ctx-item" onclick="sortTableDir(${colIndex},'asc');closeColMenu()"><span class="col-ctx-icon">▲</span>Ascending</div>`;
+    html += `<div class="col-ctx-item" onclick="sortTableDir(${colIndex},'desc');closeColMenu()"><span class="col-ctx-icon">▼</span>Descending</div>`;
+
+    // Format (numeric only)
+    if (isNumeric) {
+        html += '<div class="col-ctx-sep"></div><div class="col-ctx-header">Format</div>';
+        FORMATS.forEach(f => {
+            const tick = currentFmt && currentFmt.type === f.type ? ' \u2713' : '';
+            html += `<div class="col-ctx-item" onclick="setColFormat(${colIndex},'${f.type}','${f.label}','${f.icon}');closeColMenu()">`
+                  + `<span class="col-ctx-icon col-ctx-icon-mono">${f.icon}</span>${escapeHtml(f.label)}${tick}</div>`;
+        });
+        if (currentFmt) {
+            html += `<div class="col-ctx-item col-ctx-item-danger" onclick="clearColFormat(${colIndex});closeColMenu()"><span class="col-ctx-icon">×</span>Reset format</div>`;
+        }
+
+        // Calculate
+        html += '<div class="col-ctx-sep"></div><div class="col-ctx-header">Calculate</div>';
+        html += `<div class="col-ctx-item" onclick="addDerivedCol(${colIndex},'pct_total');closeColMenu()"><span class="col-ctx-icon">%</span>Add % of total</div>`;
+        html += `<div class="col-ctx-item" onclick="addDerivedCol(${colIndex},'running_total');closeColMenu()"><span class="col-ctx-icon">Σ</span>Add running total</div>`;
+        html += `<div class="col-ctx-item" onclick="addDerivedCol(${colIndex},'delta');closeColMenu()"><span class="col-ctx-icon">Δ</span>Add change (Δ)</div>`;
+        if (hasDerived) {
+            html += `<div class="col-ctx-item col-ctx-item-danger" onclick="removeDerivedCol(${colIndex});closeColMenu()"><span class="col-ctx-icon">×</span>Remove derived column</div>`;
+        }
+    }
+
+    // Filter / Copy
+    html += '<div class="col-ctx-sep"></div><div class="col-ctx-header">Filter · Copy</div>';
+    html += `<div class="col-ctx-item" onclick="filterColNonNull(${colIndex});closeColMenu()"><span class="col-ctx-icon">≠∅</span>Filter non-null</div>`;
+    html += `<div class="col-ctx-item" onclick="copyColValues(${colIndex});closeColMenu()"><span class="col-ctx-icon">⧉</span>Copy column values</div>`;
+
+    // Analyze
+    html += '<div class="col-ctx-sep"></div><div class="col-ctx-header">Analyze</div>';
+    html += `<div class="col-ctx-item" onclick="askAboutCol(${colIndex});closeColMenu()"><span class="col-ctx-icon">→</span>Ask about this column</div>`;
+
+    // ── Build / position menu element ─────────────────────────
+    let menu = document.getElementById('col-ctx-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'col-ctx-menu';
+        menu.className = 'col-ctx-menu';
+        document.body.appendChild(menu);
+    }
+    menu.innerHTML = html;
+    menu.style.display = 'block';
+
+    // Position near cursor, clamped to viewport.
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const mw = 220, mh = menu.scrollHeight || 320;
+    menu.style.left = (event.clientX + mw > vw ? vw - mw - 8 : event.clientX) + 'px';
+    menu.style.top  = (event.clientY + mh > vh ? vh - mh - 8 : event.clientY) + 'px';
+
+    // Close on next outside click or Esc
+    const _close = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Escape') return;
+        closeColMenu();
+        document.removeEventListener('click',   _close);
+        document.removeEventListener('keydown', _close);
+        document.removeEventListener('contextmenu', _close);
+    };
+    setTimeout(() => {
+        document.addEventListener('click',       _close);
+        document.addEventListener('keydown',     _close);
+        document.addEventListener('contextmenu', _close);
+    }, 0);
+}
+
+function closeColMenu() {
+    const m = document.getElementById('col-ctx-menu');
+    if (m) m.style.display = 'none';
+}
+
+// ── Format actions ────────────────────────────────────────────────
+
+function setColFormat(colIndex, type, label, icon) {
+    _colFormats[colIndex] = { type, label, icon: icon || type };
+    reRenderTable();
+}
+
+function clearColFormat(colIndex) {
+    delete _colFormats[colIndex];
+    reRenderTable();
+}
+
+// ── Derived column actions ────────────────────────────────────────
+
+function addDerivedCol(sourceIndex, type) {
+    _derivedCols = _derivedCols.filter(d => d.sourceIndex !== sourceIndex);
+    delete _colSums[sourceIndex]; // recalculate on next render
+    const base  = currentResults ? currentResults.columns[sourceIndex] : 'col';
+    const names = { pct_total: base + ' %', running_total: base + ' \u03a3', delta: base + ' \u0394' };
+    _derivedCols.push({ sourceIndex, type, name: names[type] || base + ' (calc)' });
+    reRenderTable();
+}
+
+function removeDerivedCol(sourceIndex) {
+    _derivedCols = _derivedCols.filter(d => d.sourceIndex !== sourceIndex);
+    reRenderTable();
+}
+
+// ── Filter / utility actions ──────────────────────────────────────
+
+function filterColNonNull(colIndex) {
+    if (!currentResults) return;
+    const colName = currentResults.columns[colIndex];
+    const rows = currentResults.data || currentResults.rows;
+    const filtered = rows.filter(row => {
+        const v = Array.isArray(row) ? row[colIndex] : row[colName];
+        return v !== null && v !== undefined && v !== '';
+    });
+    const container = document.getElementById('table-container');
+    if (container) container.innerHTML = renderTable(currentResults, filtered);
+    const rc = document.getElementById('row-count');
+    if (rc) rc.textContent = filtered.length + ' of ' + rows.length + ' rows';
+}
+
+function copyColValues(colIndex) {
+    if (!currentResults) return;
+    const colName = currentResults.columns[colIndex];
+    const rows    = currentResults.data || currentResults.rows;
+    const text    = rows.map(row => {
+        const v = Array.isArray(row) ? row[colIndex] : row[colName];
+        return (v === null || v === undefined) ? '' : String(v);
+    }).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast(colName + ' copied (' + rows.length + ' values)', 'info');
+    });
+}
+
+function askAboutCol(colIndex) {
+    if (!currentResults) return;
+    const colName = currentResults.columns[colIndex];
+    const q = currentQuestion
+        ? 'Analyze the "' + colName + '" column from: ' + currentQuestion
+        : 'Analyze the "' + colName + '" column';
+    fillQuestion(q);
+}
+
+// ── Sort with explicit direction ──────────────────────────────────
+
+function sortTableDir(colIndex, direction) {
+    sortColumn    = colIndex;
+    sortDirection = direction;
+    reRenderTable();
+}
+
+// ── Re-render preserving current sort + filter + formats ─────────
+
+function reRenderTable() {
+    if (!currentResults) return;
+    let rows = [...(currentResults.data || currentResults.rows)];
+
+    // Apply sort
+    if (sortColumn !== null) {
+        const col = currentResults.columns[sortColumn];
+        rows.sort((a, b) => {
+            const vA = Array.isArray(a) ? a[sortColumn] : a[col];
+            const vB = Array.isArray(b) ? b[sortColumn] : b[col];
+            if (vA === null || vA === undefined) return 1;
+            if (vB === null || vB === undefined) return -1;
+            const nA = parseFloat(String(vA).replace(/[^0-9.-]/g, ''));
+            const nB = parseFloat(String(vB).replace(/[^0-9.-]/g, ''));
+            if (!isNaN(nA) && !isNaN(nB)) return sortDirection === 'asc' ? nA - nB : nB - nA;
+            return sortDirection === 'asc'
+                ? String(vA).toLowerCase().localeCompare(String(vB).toLowerCase())
+                : String(vB).toLowerCase().localeCompare(String(vA).toLowerCase());
+        });
+    }
+
+    // Apply current text filter
+    const filterInput = document.getElementById('result-filter');
+    const fv = filterInput ? filterInput.value.toLowerCase() : '';
+    if (fv) {
+        rows = rows.filter(row =>
+            (Array.isArray(row) ? row : currentResults.columns.map(c => row[c]))
+                .some(cell => cell !== null && cell !== undefined && String(cell).toLowerCase().includes(fv))
+        );
+    }
+
+    const container = document.getElementById('table-container');
+    if (container) container.innerHTML = renderTable(currentResults, rows);
+    const rc = document.getElementById('row-count');
+    if (rc) rc.textContent = rows.length + ' row' + (rows.length !== 1 ? 's' : '');
+}
+
 // Make functions globally accessible for onclick handlers
 window.askQuestion = askQuestion;
 window.toggleSql = toggleSql;
@@ -1866,6 +2206,18 @@ window.fillQuestion = fillQuestion;
 window.clearHistory = clearHistory;
 window.toggleDescribe = toggleDescribe;
 window.switchStatsTab = switchStatsTab;
+window.showToast         = showToast;
+window.showColMenu       = showColMenu;
+window.closeColMenu      = closeColMenu;
+window.setColFormat      = setColFormat;
+window.clearColFormat    = clearColFormat;
+window.addDerivedCol     = addDerivedCol;
+window.removeDerivedCol  = removeDerivedCol;
+window.filterColNonNull  = filterColNonNull;
+window.copyColValues     = copyColValues;
+window.askAboutCol       = askAboutCol;
+window.sortTableDir      = sortTableDir;
+window.reRenderTable     = reRenderTable;
 
 // ======================================================
 // THEME SYSTEM
