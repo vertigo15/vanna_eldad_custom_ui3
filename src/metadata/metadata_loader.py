@@ -287,10 +287,17 @@ class MetadataLoader:
         logger.info("metadata_sources schema column: %r", self._schema_column)
 
     async def _load_tables(self, source_key: str) -> List[str]:
+        """Return one line per table.  Description is omitted when absent."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT table_name || ' - ' || COALESCE(table_description, 'No description') AS line
+                SELECT
+                    CASE
+                        WHEN table_description IS NOT NULL
+                             AND trim(table_description) <> ''
+                        THEN table_name || ' - ' || table_description
+                        ELSE table_name
+                    END AS line
                 FROM public.metadata_tables
                 WHERE source = $1
                 ORDER BY table_name
@@ -300,16 +307,27 @@ class MetadataLoader:
         return [r["line"] for r in rows]
 
     async def _load_columns(self, source_key: str) -> List[str]:
+        """Return one line per column.  Only meaningful attributes are emitted:
+
+        - Description is omitted when absent (no 'No description' noise).
+        - PK flag only shown when TRUE  (most columns are not PKs).
+        - NOT NULL constraint only shown when NOT nullable (default is nullable).
+        - Hidden flag omitted entirely (irrelevant to query generation).
+        """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
                 SELECT
                     table_name || '.' || column_name ||
                     ' - Type: ' || data_type ||
-                    ', Description: ' || COALESCE(description, 'No description') ||
-                    ', PK: ' || CAST(is_primary_key AS TEXT) ||
-                    ', Nullable: ' || CAST(is_nullable AS TEXT) ||
-                    ', Hidden: ' || CAST(is_hidden AS TEXT) AS line
+                    CASE
+                        WHEN description IS NOT NULL AND trim(description) <> ''
+                        THEN ', Description: ' || description
+                        ELSE ''
+                    END ||
+                    CASE WHEN COALESCE(is_primary_key, FALSE) = TRUE THEN ', PK: true' ELSE '' END ||
+                    CASE WHEN COALESCE(is_nullable,    TRUE)  = FALSE THEN ', NOT NULL'   ELSE '' END
+                    AS line
                 FROM public.metadata_columns
                 WHERE source = $1
                 ORDER BY table_name, column_name
