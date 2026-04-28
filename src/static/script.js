@@ -19,6 +19,7 @@ let insightsManager = null;
 
 // ── Connection (Jeen Insights) ──────────────────────────────
 const CONNECTION_STORAGE_KEY = 'jeen_insights_connection';
+const SIDEBAR_TAB_KEY        = 'jeen_sidebar_tab'; // 'tables' | 'recent'
 let availableConnections = [];
 let activeTable = null;
 let lastQueryDurationMs = 0;
@@ -1513,6 +1514,22 @@ function clearHistory() {
     // Clearing history would require database operations
     // This function is kept for compatibility but does nothing
     console.log('History is managed in the database');
+}
+
+// Switch the left sidebar between the Tables pane and the Recent Questions pane.
+// `tab` is either 'tables' or 'recent'. The choice is persisted to localStorage.
+function switchSidebarTab(tab) {
+    ['tables', 'recent'].forEach(t => {
+        const btn  = document.getElementById('sidebar-tab-'  + t);
+        const pane = document.getElementById('sidebar-pane-' + t);
+        const active = (t === tab);
+        if (btn)  {
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        }
+        if (pane) pane.style.display = active ? '' : 'none';
+    });
+    try { localStorage.setItem(SIDEBAR_TAB_KEY, tab); } catch (_) {}
 }
 
 // Filter the sidebar recent-questions list in real time.
@@ -3630,6 +3647,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Custom connection switcher (replaces the native <select>).
     if (typeof ConnectionPanel !== 'undefined') ConnectionPanel.init();
 
+    // Restore sidebar tab preference (Tables vs Recent) from localStorage.
+    (function () {
+        const saved = (function () {
+            try { return localStorage.getItem(SIDEBAR_TAB_KEY); } catch (_) { return null; }
+        })();
+        switchSidebarTab(saved === 'recent' ? 'recent' : 'tables');
+    })();
+
     // ── History Drawer ──────────────────────────────────────────────────
     (function () {
         const drawer  = document.getElementById('history-drawer');
@@ -3808,6 +3833,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.filterQuestionHistory = filterQuestionHistory;
     window.loadHistoryLog = loadHistoryLog;
     window.filterHistoryLog = filterHistoryLog;
+    window.switchSidebarTab = switchSidebarTab;
     window.togglePromptSection = togglePromptSection;
     window.switchPromptTab = switchPromptTab;
     window.toggleSidebar = toggleSidebar;
